@@ -178,9 +178,16 @@ def create_pdf_bytes():
     with PdfPages(buffer) as pdf:
         problems = [generate_math_data() for _ in range(20)]
         
+        # Generic form mappings for Answer Key 1
+        generic_forms = {
+            'Vertex': r"Vertex: $y = a(x-h)^2 + k$",
+            'Intercept': r"Intercept: $y = a(x-p)(x-q)$",
+            'Standard': r"Standard: $y = ax^2 + bx + c$"
+        }
+        
         # --- Page 1: Unlabelled Graphs ---
         fig, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
-        fig.subplots_adjust(wspace=0.1, hspace=0.35, top=0.92, bottom=0.05, left=0.05, right=0.95)
+        fig.subplots_adjust(wspace=0.1, hspace=0.55, top=0.92, bottom=0.05, left=0.05, right=0.95)
         fig.suptitle("Worksheet: Identify the Form", fontsize=16, fontweight='bold')
         
         for i, ax in enumerate(axes.flatten()):
@@ -196,6 +203,7 @@ def create_pdf_bytes():
             ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
+            ax.set_xlabel("y = _________________", fontsize=8) # Added writing prompt
             
         pdf.savefig(fig)
         plt.close(fig)
@@ -206,15 +214,17 @@ def create_pdf_bytes():
         ax_ans1.text(0.5, 0.95, "Answer Key: Equation Forms", fontsize=16, fontweight='bold', ha='center')
         
         for i in range(10):
-            ax_ans1.text(0.15, 0.88 - (i*0.04), f"Q{i+1}: {' or '.join(problems[i][7])}", fontsize=12)
-            ax_ans1.text(0.55, 0.88 - (i*0.04), f"Q{i+11}: {' or '.join(problems[i+10][7])}", fontsize=12)
+            ans_left = " or ".join([generic_forms[ans] for ans in problems[i][7]])
+            ans_right = " or ".join([generic_forms[ans] for ans in problems[i+10][7]])
+            ax_ans1.text(0.02, 0.88 - (i*0.06), f"Q{i+1}: {ans_left}", fontsize=11)
+            ax_ans1.text(0.52, 0.88 - (i*0.06), f"Q{i+11}: {ans_right}", fontsize=11)
             
         pdf.savefig(fig_ans1)
         plt.close(fig_ans1)
 
         # --- Page 3: Labeled Graphs ---
         fig2, axes2 = plt.subplots(5, 4, figsize=(8.27, 11.69))
-        fig2.subplots_adjust(wspace=0.1, hspace=0.35, top=0.92, bottom=0.05, left=0.05, right=0.95)
+        fig2.subplots_adjust(wspace=0.1, hspace=0.55, top=0.92, bottom=0.05, left=0.05, right=0.95)
         fig2.suptitle("Worksheet: Labeled Coordinates", fontsize=16, fontweight='bold')
         
         for i, ax in enumerate(axes2.flatten()):
@@ -234,6 +244,7 @@ def create_pdf_bytes():
             ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
+            ax.set_xlabel("y = _________________", fontsize=8) # Added writing prompt
             
         pdf.savefig(fig2)
         plt.close(fig2)
@@ -257,17 +268,16 @@ def create_pdf_bytes():
             ax_app.text(0.5, 0.96, f"Appendix: Step-by-Step Solutions (Page {page+1}/5)", fontsize=14, fontweight='bold', ha='center')
             
             y_text = 0.88
-            for idx in range(4): # Reduced to 4 per page to prevent text overlap
+            for idx in range(4):
                 q_num = page * 4 + idx
                 steps_clean = problems[q_num][8].replace("**", "")
                 ax_app.text(0.05, y_text, f"Q{q_num+1}:\n{steps_clean}", fontsize=9, va='top')
-                y_text -= 0.22 # Increased vertical spacing
+                y_text -= 0.22 
                 
             pdf.savefig(fig_app)
             plt.close(fig_app)
         
     return buffer.getvalue()
-
 
 # --- Streamlit UI ---
 
