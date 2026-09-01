@@ -349,47 +349,45 @@ def create_pdf_bytes():
 
 # --- Streamlit UI ---
 
-# 1. Top Bar: Title & PDF Controls & Settings
-col_title, col_pdf, col_set = st.columns([4, 3, 1])
+st.title("Quadratic Finder")
 
-with col_title:
-    st.title("Quadratic Finder")
+# 1. Flattened PDF Controls & Settings 
+if 'pdf_bytes' not in st.session_state:
+    st.session_state.pdf_bytes = None
     
-with col_pdf:
-    st.write("\n") 
-    if 'pdf_bytes' not in st.session_state:
-        st.session_state.pdf_bytes = None
-        
-    if st.session_state.pdf_bytes is None:
+if st.session_state.pdf_bytes is None:
+    col_pdf, col_set = st.columns([5, 1])
+    with col_pdf:
         if st.button("📄 Prepare Worksheet", use_container_width=True):
             with st.spinner("Compiling master PDF... (~10s)"):
                 st.session_state.pdf_bytes = create_pdf_bytes()
             st.rerun()
-    else:
-        col_dl, col_rs = st.columns(2)
-        with col_dl:
-            current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-            st.download_button(
-                label="⬇️ Download",
-                data=st.session_state.pdf_bytes,
-                file_name=f"Quadratic_Master_Worksheet_{current_time}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                type="primary"
-            )
-        with col_rs:
-            if st.button("Reset", use_container_width=True):
-                st.session_state.pdf_bytes = None
-                st.rerun()
+    with col_set:
+        with st.popover("⚙️", use_container_width=True):
+            st.write("**Settings**")
+            st.toggle("Show Grid Lines", key="show_grid")
+else:
+    col_dl, col_rs, col_set = st.columns([3, 3, 1])
+    with col_dl:
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            label="⬇️ Download",
+            data=st.session_state.pdf_bytes,
+            file_name=f"Quadratic_Master_Worksheet_{current_time}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            type="primary"
+        )
+    with col_rs:
+        if st.button("Reset", use_container_width=True):
+            st.session_state.pdf_bytes = None
+            st.rerun()
+    with col_set:
+        with st.popover("⚙️", use_container_width=True):
+            st.write("**Settings**")
+            st.toggle("Show Grid Lines", key="show_grid")
 
-with col_set:
-    st.write("\n")
-    with st.popover("⚙️"):
-        st.write("**Settings**")
-        st.toggle("Show Grid Lines", key="show_grid")
-
-
-# 2. Main App Content
+# 2. Flattened App Content
 st.write("Which general form is most efficient for this graph?")
 st.latex(r"") 
 
@@ -398,9 +396,9 @@ if 'generating' not in st.session_state:
 
 col_toggle1, col_toggle2 = st.columns(2)
 with col_toggle1:
-    show_labels = st.toggle("Show Coordinate Labels", value=False)
+    show_labels = st.toggle("Coordinates", value=False)
 with col_toggle2:
-    show_equations = st.toggle("Show General Equations", value=False)
+    show_equations = st.toggle("Equation Buttons", value=False)
 
 if st.session_state.generating:
     st.info("Drawing next parabola... please wait.")
