@@ -117,6 +117,7 @@ def generate_math_data():
         eq_v = f"y = {fmt_a(a)}{'x^2' if h==0 else f'(x - {h})^2' if h>0 else f'(x + {abs(h)})^2'}{'' if k==0 else f' + {fmt_num(k)}' if k>0 else f' - {fmt_num(abs(k))}'}"
         fmt_root = lambda r: "x" if r == 0 else f"(x - {r})" if r > 0 else f"(x + {abs(r)})"
         eq_i = f"y = {fmt_a(a)}{fmt_root(r1)}{fmt_root(r2)}"
+        eq = f"{eq_v}$ or ${eq_i}"
         
         steps = (f"**Both forms are equally efficient!**\n\n"
                  f"- **Vertex:** $(h,k)=({h},{fmt_num(k)})$, sub $({r2},0) \\Rightarrow {eq_v}$\n"
@@ -147,10 +148,10 @@ def generate_math_data():
     x_pad, y_pad = max(1.5, (max(all_x) - min(all_x)) * 0.2), max(1.5, (max(all_y) - min(all_y)) * 0.2)
     x_vals = np.linspace(min(all_x) - x_pad - 5, max(all_x) + x_pad + 5, 400)
     
-    return points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps
+    return points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps, eq
 
 def generate_problem():
-    points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps = generate_math_data()
+    points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps, eq = generate_math_data()
     
     def create_fig(show_labels_val):
         fig, ax = plt.subplots(figsize=(4, 4))
@@ -175,15 +176,15 @@ def generate_problem():
 def create_pdf_bytes():
     buffer = io.BytesIO()
     with PdfPages(buffer) as pdf:
-        # Page 1: Graphs (5 rows x 4 columns = 20 graphs on an A4 layout)
+        problems = [generate_math_data() for _ in range(20)]
+        
+        # --- Page 1: Unlabelled Graphs ---
         fig, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
         fig.subplots_adjust(wspace=0.1, hspace=0.35, top=0.92, bottom=0.05, left=0.05, right=0.95)
-        fig.suptitle("Quadratic Form Finder - Worksheet", fontsize=16, fontweight='bold')
-        
-        answer_key_data = []
+        fig.suptitle("Worksheet: Identify the Form", fontsize=16, fontweight='bold')
         
         for i, ax in enumerate(axes.flatten()):
-            points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps = generate_math_data()
+            points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps, eq = problems[i]
             
             ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=1.5)
             for px, py in points:
@@ -196,29 +197,75 @@ def create_pdf_bytes():
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
             
-            # Record the answer for the key
-            ans_str = " or ".join(correct)
-            answer_key_data.append(f"Q{i+1}: {ans_str}")
-        
         pdf.savefig(fig)
         plt.close(fig)
         
-        # Page 2: Answer Key
-        fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
-        ax_ans.axis('off')
+        # --- Page 2: Answer Key 1 (Forms) ---
+        fig_ans1, ax_ans1 = plt.subplots(figsize=(8.27, 11.69))
+        ax_ans1.axis('off')
+        ax_ans1.text(0.5, 0.95, "Answer Key: Equation Forms", fontsize=16, fontweight='bold', ha='center')
         
-        y_text = 0.95
-        ax_ans.text(0.5, y_text, "Answer Key", fontsize=16, fontweight='bold', ha='center')
-        y_text -= 0.05
-        
-        # Display answers in two clean columns
-        col1_x, col2_x = 0.2, 0.6
         for i in range(10):
-            ax_ans.text(col1_x, y_text - (i*0.04), answer_key_data[i], fontsize=12)
-            ax_ans.text(col2_x, y_text - (i*0.04), answer_key_data[i+10], fontsize=12)
+            ax_ans1.text(0.15, 0.88 - (i*0.04), f"Q{i+1}: {' or '.join(problems[i][7])}", fontsize=12)
+            ax_ans1.text(0.55, 0.88 - (i*0.04), f"Q{i+11}: {' or '.join(problems[i+10][7])}", fontsize=12)
             
-        pdf.savefig(fig_ans)
-        plt.close(fig_ans)
+        pdf.savefig(fig_ans1)
+        plt.close(fig_ans1)
+
+        # --- Page 3: Labeled Graphs ---
+        fig2, axes2 = plt.subplots(5, 4, figsize=(8.27, 11.69))
+        fig2.subplots_adjust(wspace=0.1, hspace=0.35, top=0.92, bottom=0.05, left=0.05, right=0.95)
+        fig2.suptitle("Worksheet: Labeled Coordinates", fontsize=16, fontweight='bold')
+        
+        for i, ax in enumerate(axes2.flatten()):
+            points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps, eq = problems[i]
+            
+            ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=1.5)
+            for px, py in points:
+                ax.plot(px, py, 'o', color='darkgreen', markersize=3)
+                ax.annotate(f'({fmt_num(px)}, {fmt_num(py)})', (px, py),
+                            textcoords="offset points", xytext=(3, 3),
+                            ha='left', va='bottom', fontsize=5,
+                            bbox=dict(boxstyle='round,pad=0.1', fc='white', ec='none', alpha=0.7))
+                
+            ax.spines['left'].set_position('zero'); ax.spines['bottom'].set_position('zero')
+            ax.spines['right'].set_color('none'); ax.spines['top'].set_color('none')
+            ax.set_xticks([]); ax.set_yticks([])
+            ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
+            ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
+            ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
+            
+        pdf.savefig(fig2)
+        plt.close(fig2)
+
+        # --- Page 4: Answer Key 2 (Equations) ---
+        fig_ans2, ax_ans2 = plt.subplots(figsize=(8.27, 11.69))
+        ax_ans2.axis('off')
+        ax_ans2.text(0.5, 0.95, "Answer Key: Solved Equations", fontsize=16, fontweight='bold', ha='center')
+        
+        for i in range(10):
+            ax_ans2.text(0.1, 0.88 - (i*0.06), f"Q{i+1}: ${problems[i][9]}$", fontsize=10)
+            ax_ans2.text(0.55, 0.88 - (i*0.06), f"Q{i+11}: ${problems[i+10][9]}$", fontsize=10)
+            
+        pdf.savefig(fig_ans2)
+        plt.close(fig_ans2)
+
+        # --- Pages 5-8: Appendix (Steps) ---
+        for page in range(4):
+            fig_app, ax_app = plt.subplots(figsize=(8.27, 11.69))
+            ax_app.axis('off')
+            ax_app.text(0.5, 0.96, f"Appendix: Step-by-Step Solutions (Page {page+1}/4)", fontsize=14, fontweight='bold', ha='center')
+            
+            y_text = 0.88
+            for idx in range(5):
+                q_num = page * 5 + idx
+                # Strip Markdown bolding as Matplotlib handles that poorly outside of mathtext
+                steps_clean = problems[q_num][8].replace("**", "")
+                ax_app.text(0.05, y_text, f"Q{q_num+1}:\n{steps_clean}", fontsize=9, va='top')
+                y_text -= 0.19
+                
+            pdf.savefig(fig_app)
+            plt.close(fig_app)
         
     return buffer.getvalue()
 
@@ -228,20 +275,20 @@ col_title, col_pdf = st.columns([5, 3])
 with col_title:
     st.title("Quadratic Finder")
 with col_pdf:
-    st.write("\n") # Alignment padding
+    st.write("\n") 
     if 'pdf_bytes' not in st.session_state:
         st.session_state.pdf_bytes = None
         
     if st.session_state.pdf_bytes is None:
         if st.button("📄 Prepare PDF Worksheet", use_container_width=True):
-            with st.spinner("Building A4 grid..."):
+            with st.spinner("Compiling 8-page master PDF... (~10s)"):
                 st.session_state.pdf_bytes = create_pdf_bytes()
             st.rerun()
     else:
         st.download_button(
             label="⬇️ Download Worksheet",
             data=st.session_state.pdf_bytes,
-            file_name="Quadratic_Forms_Worksheet.pdf",
+            file_name="Quadratic_Master_Worksheet.pdf",
             mime="application/pdf",
             use_container_width=True,
             type="primary"
