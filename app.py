@@ -118,7 +118,7 @@ def generate_math_data():
         eq_v = f"y = {fmt_a(a)}{'x^2' if h==0 else f'(x - {h})^2' if h>0 else f'(x + {abs(h)})^2'}{'' if k==0 else f' + {fmt_num(k)}' if k>0 else f' - {fmt_num(abs(k))}'}"
         fmt_root = lambda r: "x" if r == 0 else f"(x - {r})" if r > 0 else f"(x + {abs(r)})"
         eq_i = f"y = {fmt_a(a)}{fmt_root(r1)}{fmt_root(r2)}"
-        eq = f"{eq_v}$ or ${eq_i}"
+        eq = f"{eq_v}$\nOR ${eq_i}"
         
         steps = (f"**Both forms are equally efficient!**\n\n"
                  f"- **Vertex:** $(h,k)=({h},{fmt_num(k)})$, sub $({r2},0) \\Rightarrow {eq_v}$\n"
@@ -204,7 +204,9 @@ def create_pdf_bytes():
             ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
-            ax.set_xlabel("y = _________________", fontsize=8) 
+            
+            # Anchors text relative to the overall bounding box, immune to spine position
+            ax.text(0.5, -0.15, "y = _________________", transform=ax.transAxes, ha='center', fontsize=10)
             
         pdf.savefig(fig)
         plt.close(fig)
@@ -215,10 +217,12 @@ def create_pdf_bytes():
         ax_ans1.text(0.5, 0.95, "Answer Key: Equation Forms", fontsize=16, fontweight='bold', ha='center')
         
         for i in range(10):
-            ans_left = " or ".join([generic_forms[ans] for ans in problems[i][7]])
-            ans_right = " or ".join([generic_forms[ans] for ans in problems[i+10][7]])
-            ax_ans1.text(0.02, 0.88 - (i*0.06), f"Q{i+1}: {ans_left}", fontsize=11)
-            ax_ans1.text(0.52, 0.88 - (i*0.06), f"Q{i+11}: {ans_right}", fontsize=11)
+            ans_left = "\nOR ".join([generic_forms[ans] for ans in problems[i][7]])
+            ans_right = "\nOR ".join([generic_forms[ans] for ans in problems[i+10][7]])
+            
+            # Utilizing va='top' and expanded row spacing (0.08) to support multi-line returns cleanly
+            ax_ans1.text(0.05, 0.88 - (i*0.08), f"Q{i+1}: {ans_left}", fontsize=11, va='top')
+            ax_ans1.text(0.55, 0.88 - (i*0.08), f"Q{i+11}: {ans_right}", fontsize=11, va='top')
             
         pdf.savefig(fig_ans1)
         plt.close(fig_ans1)
@@ -245,7 +249,7 @@ def create_pdf_bytes():
             ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
-            ax.set_xlabel("y = _________________", fontsize=8) 
+            ax.text(0.5, -0.15, "y = _________________", transform=ax.transAxes, ha='center', fontsize=10)
             
         pdf.savefig(fig2)
         plt.close(fig2)
@@ -256,8 +260,8 @@ def create_pdf_bytes():
         ax_ans2.text(0.5, 0.95, "Answer Key: Solved Equations", fontsize=16, fontweight='bold', ha='center')
         
         for i in range(10):
-            ax_ans2.text(0.1, 0.88 - (i*0.06), f"Q{i+1}: ${problems[i][9]}$", fontsize=10)
-            ax_ans2.text(0.55, 0.88 - (i*0.06), f"Q{i+11}: ${problems[i+10][9]}$", fontsize=10)
+            ax_ans2.text(0.05, 0.88 - (i*0.08), f"Q{i+1}: ${problems[i][9]}$", fontsize=11, va='top')
+            ax_ans2.text(0.55, 0.88 - (i*0.08), f"Q{i+11}: ${problems[i+10][9]}$", fontsize=11, va='top')
             
         pdf.savefig(fig_ans2)
         plt.close(fig_ans2)
