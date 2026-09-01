@@ -37,7 +37,7 @@ def generate_math_data():
         
         px, py = fmt_num(points[1][0]), fmt_num(points[1][1])
         steps = (f"**Vertex Form**\n\n1. Vertex $(h,k) = ({h}, {k})$. Anchor: $({px}, {py})$.\n"
-                 f"2. $y = a(x - h)^2 + k \\Rightarrow {py} = a({px} - ({h}))^2 + ({k})$\n"
+                 f"2. $y = a(x - h)^2 + k$\n$\\quad \\Rightarrow {py} = a({px} - ({h}))^2 + ({k})$\n"
                  f"3. ${fmt_num(py - k)} = a({fmt_num((px - h)**2)}) \\Rightarrow a = {fmt_num(a)}$\n\n**${eq}$**")
         correct = ['Vertex']
 
@@ -53,7 +53,7 @@ def generate_math_data():
         
         py = fmt_num(points[2][1])
         steps = (f"**Intercept Form**\n\n1. Roots $p={r1}, q={r2}$. Y-Int: $(0, {py})$.\n"
-                 f"2. $y = a(x - p)(x - q) \\Rightarrow {py} = a(0 - ({r1}))(0 - ({r2}))$\n"
+                 f"2. $y = a(x - p)(x - q)$\n$\\quad \\Rightarrow {py} = a(0 - ({r1}))(0 - ({r2}))$\n"
                  f"3. ${py} = {fmt_num((-r1)*(-r2))}a \\Rightarrow a = {fmt_num(a)}$\n\n**${eq}$**")
         correct = ['Intercept']
 
@@ -97,8 +97,10 @@ def generate_math_data():
         
         steps = (f"**Standard Form**\n\n"
                  f"1. Y-Int $(0, {c}) \\Rightarrow c = {c}$.\n"
-                 f"2. Sub $({px1_val}, {py1_val})$: ${py1_val} = a({px1_val})^2 + b({px1_val}) + {c} \\Rightarrow {a_coef_1}a {'+' if b_coef_1 > 0 else '-'} {abs(b_coef_1)}b = {fmt_num(Y1)}$ *(Eq. 1)*\n"
-                 f"3. Sub $({px2_val}, {py2_val})$: ${py2_val} = a({px2_val})^2 + b({px2_val}) + {c} \\Rightarrow a {'+' if px2 > 0 else '-'} b = {fmt_num(Y2)}$ *(Eq. 2)*\n"
+                 f"2. Sub $({px1_val}, {py1_val})$: ${py1_val} = a({px1_val})^2 + b({px1_val}) + {c}$\n"
+                 f"$\\quad \\Rightarrow {a_coef_1}a {'+' if b_coef_1 > 0 else '-'} {abs(b_coef_1)}b = {fmt_num(Y1)}$ *(Eq. 1)*\n"
+                 f"3. Sub $({px2_val}, {py2_val})$: ${py2_val} = a({px2_val})^2 + b({px2_val}) + {c}$\n"
+                 f"$\\quad \\Rightarrow a {'+' if px2 > 0 else '-'} b = {fmt_num(Y2)}$ *(Eq. 2)*\n"
                  f"4. Multiply Eq. 2 by {M}: ${a_coef_scaled}a {'-' if px2 < 0 else '+'} {M}b = {fmt_num(Y2_scaled)}$ *(Eq. 3)*\n"
                  f"5. Add Eq. 1 and Eq. 3 to eliminate $b$:\n"
                  f"$\\quad ({a_coef_1}a + {a_coef_scaled}a) + {b_cancel_str} = {fmt_num(Y1)} {sign_Y2_scaled}$\n"
@@ -121,8 +123,8 @@ def generate_math_data():
         eq = f"{eq_v}$\nOR ${eq_i}"
         
         steps = (f"**Both forms are equally efficient!**\n\n"
-                 f"- **Vertex:** $(h,k)=({h},{fmt_num(k)})$, sub $({r2},0) \\Rightarrow {eq_v}$\n"
-                 f"- **Intercept:** $p={r1}, q={r2}$, sub $({h},{fmt_num(k)}) \\Rightarrow {eq_i}$")
+                 f"- **Vertex:** $(h,k)=({h},{fmt_num(k)})$, sub $({r2},0)$\n$\\quad \\Rightarrow {eq_v}$\n"
+                 f"- **Intercept:** $p={r1}, q={r2}$, sub $({h},{fmt_num(k)})$\n$\\quad \\Rightarrow {eq_i}$")
         correct = ['Vertex', 'Intercept']
 
     elif form == 'trick_y_vertex':
@@ -133,7 +135,7 @@ def generate_math_data():
         
         py = fmt_num(f(2))
         steps = (f"**Vertex Form (Y-Axis Shortcut)**\n\n1. Note: Y-intercept $(0, {k})$ IS the vertex.\n"
-                 f"2. $y = ax^2 + {k} \\Rightarrow {py} = a(2)^2 + ({k})$\n"
+                 f"2. $y = ax^2 + {k}$\n$\\quad \\Rightarrow {py} = a(2)^2 + ({k})$\n"
                  f"3. ${fmt_num(py - k)} = 4a \\Rightarrow a = {fmt_num(a)}$\n\n**${eq}$**")
         correct = ['Vertex']
 
