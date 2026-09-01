@@ -1,5 +1,6 @@
 import streamlit as st
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 import random
 import time
@@ -15,7 +16,7 @@ def fmt_a(a):
 def fmt_num(n):
     return int(n) if n == int(n) else n
 
-# --- Core Math Engine (Shared by UI and PDF) ---
+# --- Core Math Engine ---
 def generate_math_data():
     forms = ['vertex', 'intercept', 'standard', 'equal_both', 'trick_y_vertex']
     weights = [6, 6, 6, 1, 1]
@@ -139,7 +140,6 @@ def generate_math_data():
                  f"3. ${fmt_num(py - k)} = 4a \\Rightarrow a = {fmt_num(a)}$\n\n**${eq}$**")
         correct = ['Vertex']
 
-    # Dynamic Scaling
     all_x, all_y = [p[0] for p in points] + [0], [p[1] for p in points] + [0]
     if form in ['intercept', 'equal_both']:
         vx = (r1 + r2) / 2 if form == 'intercept' else h
@@ -153,33 +153,46 @@ def generate_math_data():
     
     return points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps, eq
 
-def generate_problem():
-    points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps, eq = generate_math_data()
+
+# --- Dynamic Plotting Engine ---
+def draw_parabola_fig(math_data, show_labels_val, show_grid_val):
+    points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps, eq = math_data
+    fig, ax = plt.subplots(figsize=(4, 4))
     
-    def create_fig(show_labels_val):
-        fig, ax = plt.subplots(figsize=(4, 4))
-        ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=2)
-        for px, py in points:
-            ax.plot(px, py, 'o', color='darkgreen', markersize=6)
-            if show_labels_val:
-                ax.annotate(f'({fmt_num(px)}, {fmt_num(py)})', (px, py),
-                            textcoords="offset points", xytext=(4, 4),
-                            ha='left', va='bottom', fontsize=10,
-                            bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.85))
-            
-        ax.spines['left'].set_position('zero'); ax.spines['bottom'].set_position('zero')
-        ax.spines['right'].set_color('none'); ax.spines['top'].set_color('none')
-        ax.set_xticks([]); ax.set_yticks([])
-        ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
-        ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
-        return fig
+    if show_grid_val:
+        ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+        ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
+        ax.grid(True, linestyle=':', alpha=0.6)
+        ax.set_axisbelow(True)
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.tick_params(which='both', length=0)
+    else:
+        ax.set_xticks([])
+        ax.set_yticks([])
 
-    return create_fig(False), create_fig(True), correct, steps
+    ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=2)
+    for px, py in points:
+        ax.plot(px, py, 'o', color='darkgreen', markersize=6)
+        if show_labels_val:
+            ax.annotate(f'({fmt_num(px)}, {fmt_num(py)})', (px, py),
+                        textcoords="offset points", xytext=(4, 4),
+                        ha='left', va='bottom', fontsize=10,
+                        bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.85))
+        
+    ax.spines['left'].set_position('zero'); ax.spines['bottom'].set_position('zero')
+    ax.spines['right'].set_color('none'); ax.spines['top'].set_color('none')
+    ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
+    ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
+    return fig
 
+
+# --- PDF Generation Engine ---
 def create_pdf_bytes():
     buffer = io.BytesIO()
     with PdfPages(buffer) as pdf:
         problems = [generate_math_data() for _ in range(20)]
+        show_grid_pdf = st.session_state.get("show_grid", False)
         
         generic_forms = {
             'Vertex': r"Vertex: $y = a(x-h)^2 + k$",
@@ -195,13 +208,22 @@ def create_pdf_bytes():
         for i, ax in enumerate(axes.flatten()):
             points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps, eq = problems[i]
             
+            if show_grid_pdf:
+                ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+                ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
+                ax.grid(True, linestyle=':', alpha=0.6)
+                ax.set_axisbelow(True)
+                ax.set_xticklabels([]); ax.set_yticklabels([])
+                ax.tick_params(which='both', length=0)
+            else:
+                ax.set_xticks([]); ax.set_yticks([])
+
             ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=1.5)
             for px, py in points:
                 ax.plot(px, py, 'o', color='darkgreen', markersize=3)
             
             ax.spines['left'].set_position('zero'); ax.spines['bottom'].set_position('zero')
             ax.spines['right'].set_color('none'); ax.spines['top'].set_color('none')
-            ax.set_xticks([]); ax.set_yticks([])
             ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
@@ -233,6 +255,16 @@ def create_pdf_bytes():
         for i, ax in enumerate(axes2.flatten()):
             points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps, eq = problems[i]
             
+            if show_grid_pdf:
+                ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+                ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
+                ax.grid(True, linestyle=':', alpha=0.6)
+                ax.set_axisbelow(True)
+                ax.set_xticklabels([]); ax.set_yticklabels([])
+                ax.tick_params(which='both', length=0)
+            else:
+                ax.set_xticks([]); ax.set_yticks([])
+
             ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=1.5)
             for px, py in points:
                 ax.plot(px, py, 'o', color='darkgreen', markersize=3)
@@ -243,7 +275,6 @@ def create_pdf_bytes():
                 
             ax.spines['left'].set_position('zero'); ax.spines['bottom'].set_position('zero')
             ax.spines['right'].set_color('none'); ax.spines['top'].set_color('none')
-            ax.set_xticks([]); ax.set_yticks([])
             ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
@@ -315,36 +346,50 @@ def create_pdf_bytes():
         
     return buffer.getvalue()
 
+
 # --- Streamlit UI ---
 
-# 1. PDF Controls
-if 'pdf_bytes' not in st.session_state:
-    st.session_state.pdf_bytes = None
+# 1. Top Bar: Title & PDF Controls & Settings
+col_title, col_pdf, col_set = st.columns([4, 3, 1])
+
+with col_title:
+    st.title("Quadratic Finder")
     
-if st.session_state.pdf_bytes is None:
-    if st.button("📄 Prepare PDF Worksheet", use_container_width=True):
-        with st.spinner("Compiling dynamic master PDF... (~10s)"):
-            st.session_state.pdf_bytes = create_pdf_bytes()
-        st.rerun()
-else:
-    col_dl, col_rs = st.columns(2)
-    with col_dl:
-        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        st.download_button(
-            label="⬇️ Download Worksheet",
-            data=st.session_state.pdf_bytes,
-            file_name=f"Quadratic_Master_Worksheet_{current_time}.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-            type="primary"
-        )
-    with col_rs:
-        if st.button("Reset PDF", use_container_width=True):
-            st.session_state.pdf_bytes = None
+with col_pdf:
+    st.write("\n") 
+    if 'pdf_bytes' not in st.session_state:
+        st.session_state.pdf_bytes = None
+        
+    if st.session_state.pdf_bytes is None:
+        if st.button("📄 Prepare Worksheet", use_container_width=True):
+            with st.spinner("Compiling master PDF... (~10s)"):
+                st.session_state.pdf_bytes = create_pdf_bytes()
             st.rerun()
+    else:
+        col_dl, col_rs = st.columns(2)
+        with col_dl:
+            current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button(
+                label="⬇️ Download",
+                data=st.session_state.pdf_bytes,
+                file_name=f"Quadratic_Master_Worksheet_{current_time}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary"
+            )
+        with col_rs:
+            if st.button("Reset", use_container_width=True):
+                st.session_state.pdf_bytes = None
+                st.rerun()
+
+with col_set:
+    st.write("\n")
+    with st.popover("⚙️"):
+        st.write("**Settings**")
+        st.toggle("Show Grid Lines", key="show_grid")
+
 
 # 2. Main App Content
-st.title("Quadratic Form Finder")
 st.write("Which general form is most efficient for this graph?")
 st.latex(r"") 
 
@@ -359,23 +404,26 @@ with col_toggle2:
 
 if st.session_state.generating:
     st.info("Drawing next parabola... please wait.")
-    st.session_state.fig_unlab, st.session_state.fig_lab, st.session_state.correct, st.session_state.steps = generate_problem()
+    st.session_state.math_data = generate_math_data()
     st.session_state.answered = False
     st.session_state.feedback = ""
     st.session_state.generating = False
     st.rerun()
     
 else:
-    if show_labels:
-        st.pyplot(st.session_state.fig_lab)
-    else:
-        st.pyplot(st.session_state.fig_unlab)
+    # Dynamically draw the figure based on the current toggle states
+    fig = draw_parabola_fig(st.session_state.math_data, show_labels, st.session_state.show_grid)
+    st.pyplot(fig)
+
+    # Extract correct answers and steps from session state data
+    correct = st.session_state.math_data[7]
+    steps = st.session_state.math_data[8]
 
     if not st.session_state.answered:
         c1, c2, c3 = st.columns(3)
         
         def check_ans(guess):
-            if guess in st.session_state.correct:
+            if guess in correct:
                 st.session_state.answered = True
                 st.session_state.feedback = "✅ Correct!"
             else:
@@ -396,7 +444,7 @@ else:
             st.error(st.session_state.feedback)
 
     if st.session_state.answered:
-        st.info(st.session_state.steps)
+        st.info(steps)
         if st.button("Next Parabola", use_container_width=True):
             st.session_state.generating = True
             st.rerun()
