@@ -54,16 +54,20 @@ def generate_problem():
         correct = ['Intercept']
 
     elif form == 'standard':
+        # Select from our curated pairs to keep elimination clean
+        px1 = random.choice([2, -2, 3, -3])
+        px2 = -1 if px1 > 0 else 1
+        
         b = random.choice([-3, -2, -1, 1, 2, 3]) 
         c = random.randint(-4, 4)
         f = lambda x: a * x**2 + b * x + c
         
-        while f(2) == 0 and f(-1) == 0:
+        while f(px1) == 0 and f(px2) == 0:
             b = random.choice([-3, -2, -1, 1, 2, 3])
             c = random.randint(-4, 4)
             f = lambda x: a * x**2 + b * x + c
             
-        points.extend([(0, c), (2, f(2)), (-1, f(-1))])
+        points.extend([(0, c), (px1, f(px1)), (px2, f(px2))])
         
         a_str = fmt_a(a)
         t2 = "" if b == 0 else " + x" if b == 1 else " - x" if b == -1 else f" + {b}x" if b > 0 else f" - {abs(b)}x"
@@ -71,26 +75,33 @@ def generate_problem():
         eq_str = f"{a_str}x^2{t2}{t3}"
         eq = f"y = {eq_str[3:] if eq_str.startswith(' + ') else eq_str}"
         
-        px1, py1 = 2, fmt_num(f(2))
-        px2, py2 = -1, fmt_num(f(-1))
+        px1_val, py1_val = px1, fmt_num(f(px1))
+        px2_val, py2_val = px2, fmt_num(f(px2))
         
-        # Dynamic math variables for step-by-step elimination
-        Y1 = py1 - c
-        Y2 = py2 - c
-        Y2_scaled = 2 * Y2
+        Y1 = py1_val - c
+        Y2 = py2_val - c
+        M = abs(px1)
+        
+        Y2_scaled = M * Y2
         sum_Y = Y1 + Y2_scaled
         sign_Y2_scaled = f"+ {fmt_num(Y2_scaled)}" if Y2_scaled >= 0 else f"- {fmt_num(abs(Y2_scaled))}"
         
+        a_coef_1 = px1**2
+        b_coef_1 = px1
+        a_coef_scaled = M
+        b_cancel_str = f"({b_coef_1}b - {abs(b_coef_1)}b)" if b_coef_1 > 0 else f"(-{abs(b_coef_1)}b + {abs(b_coef_1)}b)"
+        a_sum = a_coef_1 + a_coef_scaled
+        
         steps = (f"**Standard Form**\n\n"
                  f"1. Y-Int $(0, {c}) \\Rightarrow c = {c}$.\n"
-                 f"2. Sub $(2, {py1})$: ${py1} = a(2)^2 + b(2) + {c} \\Rightarrow 4a + 2b = {fmt_num(Y1)}$ *(Eq. 1)*\n"
-                 f"3. Sub $(-1, {py2})$: ${py2} = a(-1)^2 + b(-1) + {c} \\Rightarrow a - b = {fmt_num(Y2)}$ *(Eq. 2)*\n"
-                 f"4. Multiply Eq. 2 by 2: $2a - 2b = {fmt_num(Y2_scaled)}$ *(Eq. 3)*\n"
+                 f"2. Sub $({px1_val}, {py1_val})$: ${py1_val} = a({px1_val})^2 + b({px1_val}) + {c} \\Rightarrow {a_coef_1}a {'+' if b_coef_1 > 0 else '-'} {abs(b_coef_1)}b = {fmt_num(Y1)}$ *(Eq. 1)*\n"
+                 f"3. Sub $({px2_val}, {py2_val})$: ${py2_val} = a({px2_val})^2 + b({px2_val}) + {c} \\Rightarrow a {'+' if px2 > 0 else '-'} b = {fmt_num(Y2)}$ *(Eq. 2)*\n"
+                 f"4. Multiply Eq. 2 by {M}: ${a_coef_scaled}a {'-' if px2 < 0 else '+'} {M}b = {fmt_num(Y2_scaled)}$ *(Eq. 3)*\n"
                  f"5. Add Eq. 1 and Eq. 3 to eliminate $b$:\n"
-                 f"$\\quad (4a + 2a) + (2b - 2b) = {fmt_num(Y1)} {sign_Y2_scaled}$\n"
-                 f"$\\quad 6a = {fmt_num(sum_Y)} \\Rightarrow a = {fmt_num(a)}$\n"
+                 f"$\\quad ({a_coef_1}a + {a_coef_scaled}a) + {b_cancel_str} = {fmt_num(Y1)} {sign_Y2_scaled}$\n"
+                 f"$\\quad {a_sum}a = {fmt_num(sum_Y)} \\Rightarrow a = {fmt_num(a)}$\n"
                  f"6. Substitute $a = {fmt_num(a)}$ back into Eq. 2:\n"
-                 f"$\\quad {fmt_num(a)} - b = {fmt_num(Y2)} \\Rightarrow b = {b}$\n\n"
+                 f"$\\quad {fmt_num(a)} {'+' if px2 > 0 else '-'} b = {fmt_num(Y2)} \\Rightarrow b = {b}$\n\n"
                  f"**${eq}$**")
         correct = ['Standard']
 
@@ -158,7 +169,7 @@ def generate_problem():
 # --- Streamlit UI ---
 st.title("Quadratic Form Finder")
 st.write("Which general form is most efficient for this graph?")
-st.latex(r"") # This invisible LaTeX block forces the math engine to preload cleanly!
+st.latex(r"") # Preloads KaTeX engine
 
 if 'generating' not in st.session_state:
     st.session_state.generating = True
