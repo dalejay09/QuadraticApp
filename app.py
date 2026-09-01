@@ -388,9 +388,6 @@ else:
             st.toggle("Show Grid Lines", key="show_grid")
 
 # 2. Flattened App Content
-st.write("Which general form is most efficient for this graph?")
-st.latex(r"") 
-
 if 'generating' not in st.session_state:
     st.session_state.generating = True
 
@@ -399,6 +396,9 @@ with col_toggle1:
     show_labels = st.toggle("Coordinates", value=False)
 with col_toggle2:
     show_equations = st.toggle("Equation Buttons", value=False)
+
+st.write("Which general form is most efficient for this graph?")
+st.latex(r"") # Preloads KaTeX engine
 
 if st.session_state.generating:
     st.info("Drawing next parabola... please wait.")
