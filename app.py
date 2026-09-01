@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 import time
+import io
+from matplotlib.backends.backend_pdf import PdfPages
 
 def fmt_a(a):
     if a == 1: return ""
@@ -12,7 +14,8 @@ def fmt_a(a):
 def fmt_num(n):
     return int(n) if n == int(n) else n
 
-def generate_problem():
+# --- Core Math Engine (Shared by UI and PDF) ---
+def generate_math_data():
     forms = ['vertex', 'intercept', 'standard', 'equal_both', 'trick_y_vertex']
     weights = [6, 6, 6, 1, 1]
     form = random.choices(forms, weights=weights, k=1)[0]
@@ -54,7 +57,6 @@ def generate_problem():
         correct = ['Intercept']
 
     elif form == 'standard':
-        # Select from our curated pairs to keep elimination clean
         px1 = random.choice([2, -2, 3, -3])
         px2 = -1 if px1 > 0 else 1
         
@@ -145,6 +147,11 @@ def generate_problem():
     x_pad, y_pad = max(1.5, (max(all_x) - min(all_x)) * 0.2), max(1.5, (max(all_y) - min(all_y)) * 0.2)
     x_vals = np.linspace(min(all_x) - x_pad - 5, max(all_x) + x_pad + 5, 400)
     
+    return points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps
+
+def generate_problem():
+    points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps = generate_math_data()
+    
     def create_fig(show_labels_val):
         fig, ax = plt.subplots(figsize=(4, 4))
         ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=2)
@@ -165,9 +172,84 @@ def generate_problem():
 
     return create_fig(False), create_fig(True), correct, steps
 
+def create_pdf_bytes():
+    buffer = io.BytesIO()
+    with PdfPages(buffer) as pdf:
+        # Page 1: Graphs (5 rows x 4 columns = 20 graphs on an A4 layout)
+        fig, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
+        fig.subplots_adjust(wspace=0.1, hspace=0.35, top=0.92, bottom=0.05, left=0.05, right=0.95)
+        fig.suptitle("Quadratic Form Finder - Worksheet", fontsize=16, fontweight='bold')
+        
+        answer_key_data = []
+        
+        for i, ax in enumerate(axes.flatten()):
+            points, f, all_x, all_y, x_pad, y_pad, x_vals, correct, steps = generate_math_data()
+            
+            ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=1.5)
+            for px, py in points:
+                ax.plot(px, py, 'o', color='darkgreen', markersize=3)
+            
+            ax.spines['left'].set_position('zero'); ax.spines['bottom'].set_position('zero')
+            ax.spines['right'].set_color('none'); ax.spines['top'].set_color('none')
+            ax.set_xticks([]); ax.set_yticks([])
+            ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
+            ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
+            ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
+            
+            # Record the answer for the key
+            ans_str = " or ".join(correct)
+            answer_key_data.append(f"Q{i+1}: {ans_str}")
+        
+        pdf.savefig(fig)
+        plt.close(fig)
+        
+        # Page 2: Answer Key
+        fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
+        ax_ans.axis('off')
+        
+        y_text = 0.95
+        ax_ans.text(0.5, y_text, "Answer Key", fontsize=16, fontweight='bold', ha='center')
+        y_text -= 0.05
+        
+        # Display answers in two clean columns
+        col1_x, col2_x = 0.2, 0.6
+        for i in range(10):
+            ax_ans.text(col1_x, y_text - (i*0.04), answer_key_data[i], fontsize=12)
+            ax_ans.text(col2_x, y_text - (i*0.04), answer_key_data[i+10], fontsize=12)
+            
+        pdf.savefig(fig_ans)
+        plt.close(fig_ans)
+        
+    return buffer.getvalue()
+
 
 # --- Streamlit UI ---
-st.title("Quadratic Form Finder")
+col_title, col_pdf = st.columns([5, 3])
+with col_title:
+    st.title("Quadratic Finder")
+with col_pdf:
+    st.write("\n") # Alignment padding
+    if 'pdf_bytes' not in st.session_state:
+        st.session_state.pdf_bytes = None
+        
+    if st.session_state.pdf_bytes is None:
+        if st.button("📄 Prepare PDF Worksheet", use_container_width=True):
+            with st.spinner("Building A4 grid..."):
+                st.session_state.pdf_bytes = create_pdf_bytes()
+            st.rerun()
+    else:
+        st.download_button(
+            label="⬇️ Download Worksheet",
+            data=st.session_state.pdf_bytes,
+            file_name="Quadratic_Forms_Worksheet.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            type="primary"
+        )
+        if st.button("Reset PDF", use_container_width=True):
+            st.session_state.pdf_bytes = None
+            st.rerun()
+
 st.write("Which general form is most efficient for this graph?")
 st.latex(r"") # Preloads KaTeX engine
 
