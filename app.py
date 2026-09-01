@@ -250,19 +250,18 @@ def create_pdf_bytes():
         pdf.savefig(fig_ans2)
         plt.close(fig_ans2)
 
-        # --- Pages 5-8: Appendix (Steps) ---
-        for page in range(4):
+        # --- Pages 5-9: Appendix (Steps) ---
+        for page in range(5):
             fig_app, ax_app = plt.subplots(figsize=(8.27, 11.69))
             ax_app.axis('off')
-            ax_app.text(0.5, 0.96, f"Appendix: Step-by-Step Solutions (Page {page+1}/4)", fontsize=14, fontweight='bold', ha='center')
+            ax_app.text(0.5, 0.96, f"Appendix: Step-by-Step Solutions (Page {page+1}/5)", fontsize=14, fontweight='bold', ha='center')
             
             y_text = 0.88
-            for idx in range(5):
-                q_num = page * 5 + idx
-                # Strip Markdown bolding as Matplotlib handles that poorly outside of mathtext
+            for idx in range(4): # Reduced to 4 per page to prevent text overlap
+                q_num = page * 4 + idx
                 steps_clean = problems[q_num][8].replace("**", "")
                 ax_app.text(0.05, y_text, f"Q{q_num+1}:\n{steps_clean}", fontsize=9, va='top')
-                y_text -= 0.19
+                y_text -= 0.22 # Increased vertical spacing
                 
             pdf.savefig(fig_app)
             plt.close(fig_app)
@@ -271,20 +270,19 @@ def create_pdf_bytes():
 
 
 # --- Streamlit UI ---
-col_title, col_pdf = st.columns([5, 3])
-with col_title:
-    st.title("Quadratic Finder")
-with col_pdf:
-    st.write("\n") 
-    if 'pdf_bytes' not in st.session_state:
-        st.session_state.pdf_bytes = None
-        
-    if st.session_state.pdf_bytes is None:
-        if st.button("📄 Prepare PDF Worksheet", use_container_width=True):
-            with st.spinner("Compiling 8-page master PDF... (~10s)"):
-                st.session_state.pdf_bytes = create_pdf_bytes()
-            st.rerun()
-    else:
+
+# 1. PDF Controls (Placed at the very top of the app)
+if 'pdf_bytes' not in st.session_state:
+    st.session_state.pdf_bytes = None
+    
+if st.session_state.pdf_bytes is None:
+    if st.button("📄 Prepare PDF Worksheet", use_container_width=True):
+        with st.spinner("Compiling 9-page master PDF... (~10s)"):
+            st.session_state.pdf_bytes = create_pdf_bytes()
+        st.rerun()
+else:
+    col_dl, col_rs = st.columns(2)
+    with col_dl:
         st.download_button(
             label="⬇️ Download Worksheet",
             data=st.session_state.pdf_bytes,
@@ -293,10 +291,13 @@ with col_pdf:
             use_container_width=True,
             type="primary"
         )
+    with col_rs:
         if st.button("Reset PDF", use_container_width=True):
             st.session_state.pdf_bytes = None
             st.rerun()
 
+# 2. Main App Content
+st.title("Quadratic Form Finder")
 st.write("Which general form is most efficient for this graph?")
 st.latex(r"") # Preloads KaTeX engine
 
