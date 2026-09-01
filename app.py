@@ -179,7 +179,6 @@ def create_pdf_bytes():
     with PdfPages(buffer) as pdf:
         problems = [generate_math_data() for _ in range(20)]
         
-        # Generic form mappings for Answer Key 1
         generic_forms = {
             'Vertex': r"Vertex: $y = a(x-h)^2 + k$",
             'Intercept': r"Intercept: $y = a(x-p)(x-q)$",
@@ -204,8 +203,6 @@ def create_pdf_bytes():
             ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
-            
-            # Anchors text relative to the overall bounding box, immune to spine position
             ax.text(0.5, -0.15, "y = _________________", transform=ax.transAxes, ha='center', fontsize=10)
             
         pdf.savefig(fig)
@@ -220,7 +217,6 @@ def create_pdf_bytes():
             ans_left = "\nOR ".join([generic_forms[ans] for ans in problems[i][7]])
             ans_right = "\nOR ".join([generic_forms[ans] for ans in problems[i+10][7]])
             
-            # Utilizing va='top' and expanded row spacing (0.08) to support multi-line returns cleanly
             ax_ans1.text(0.05, 0.88 - (i*0.08), f"Q{i+1}: {ans_left}", fontsize=11, va='top')
             ax_ans1.text(0.55, 0.88 - (i*0.08), f"Q{i+11}: {ans_right}", fontsize=11, va='top')
             
@@ -266,18 +262,51 @@ def create_pdf_bytes():
         pdf.savefig(fig_ans2)
         plt.close(fig_ans2)
 
-        # --- Pages 5-9: Appendix (Steps) ---
-        for page in range(5):
+        # --- Appendix: Dynamic Pagination Layout ---
+        app_pages = []
+        current_page_items = []
+        current_col = 0
+        current_slot = 0
+        
+        for i, prob in enumerate(problems):
+            is_standard = 'Standard' in prob[7]
+            slots_needed = 2 if is_standard else 1
+            
+            if current_slot + slots_needed > 4:
+                current_col += 1
+                current_slot = 0
+                
+            if current_col > 1:
+                app_pages.append(current_page_items)
+                current_page_items = []
+                current_col = 0
+                current_slot = 0
+                
+            current_page_items.append({'idx': i, 'prob': prob, 'col': current_col, 'slot': current_slot})
+            current_slot += slots_needed
+            
+        if current_page_items:
+            app_pages.append(current_page_items)
+            
+        total_app_pages = len(app_pages)
+        
+        for page_idx, page_items in enumerate(app_pages):
             fig_app, ax_app = plt.subplots(figsize=(8.27, 11.69))
             ax_app.axis('off')
-            ax_app.text(0.5, 0.96, f"Appendix: Step-by-Step Solutions (Page {page+1}/5)", fontsize=14, fontweight='bold', ha='center')
+            ax_app.text(0.5, 0.96, f"Appendix: Step-by-Step Solutions (Page {page_idx+1}/{total_app_pages})", fontsize=14, fontweight='bold', ha='center')
             
-            y_text = 0.88
-            for idx in range(4):
-                q_num = page * 4 + idx
-                steps_clean = problems[q_num][8].replace("**", "")
-                ax_app.text(0.05, y_text, f"Q{q_num+1}:\n{steps_clean}", fontsize=9, va='top')
-                y_text -= 0.22 
+            for item in page_items:
+                q_num = item['idx']
+                prob_data = item['prob']
+                col = item['col']
+                slot = item['slot']
+                
+                x_pos = 0.04 if col == 0 else 0.52
+                y_pos = 0.88 - (slot * 0.22)
+                
+                steps_clean = prob_data[8].replace("**", "")
+                
+                ax_app.text(x_pos, y_pos, f"Q{q_num+1}:\n{steps_clean}", fontsize=8.5, va='top')
                 
             pdf.savefig(fig_app)
             plt.close(fig_app)
@@ -286,13 +315,13 @@ def create_pdf_bytes():
 
 # --- Streamlit UI ---
 
-# 1. PDF Controls (Placed at the very top of the app)
+# 1. PDF Controls
 if 'pdf_bytes' not in st.session_state:
     st.session_state.pdf_bytes = None
     
 if st.session_state.pdf_bytes is None:
     if st.button("📄 Prepare PDF Worksheet", use_container_width=True):
-        with st.spinner("Compiling 9-page master PDF... (~10s)"):
+        with st.spinner("Compiling dynamic master PDF... (~10s)"):
             st.session_state.pdf_bytes = create_pdf_bytes()
         st.rerun()
 else:
@@ -315,7 +344,7 @@ else:
 # 2. Main App Content
 st.title("Quadratic Form Finder")
 st.write("Which general form is most efficient for this graph?")
-st.latex(r"") # Preloads KaTeX engine
+st.latex(r"") 
 
 if 'generating' not in st.session_state:
     st.session_state.generating = True
