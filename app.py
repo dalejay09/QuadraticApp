@@ -4,6 +4,7 @@ import numpy as np
 import random
 import time
 import io
+from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 
 def fmt_a(a):
@@ -203,7 +204,7 @@ def create_pdf_bytes():
             ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
-            ax.set_xlabel("y = _________________", fontsize=8) # Added writing prompt
+            ax.set_xlabel("y = _________________", fontsize=8) 
             
         pdf.savefig(fig)
         plt.close(fig)
@@ -244,7 +245,7 @@ def create_pdf_bytes():
             ax.set_xlim(min(all_x) - x_pad, max(all_x) + x_pad)
             ax.set_ylim(min(all_y) - y_pad, max(all_y) + y_pad)
             ax.set_title(f"Q{i+1}", loc='left', fontsize=9, fontweight='bold', pad=3)
-            ax.set_xlabel("y = _________________", fontsize=8) # Added writing prompt
+            ax.set_xlabel("y = _________________", fontsize=8) 
             
         pdf.savefig(fig2)
         plt.close(fig2)
@@ -293,10 +294,11 @@ if st.session_state.pdf_bytes is None:
 else:
     col_dl, col_rs = st.columns(2)
     with col_dl:
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
         st.download_button(
             label="⬇️ Download Worksheet",
             data=st.session_state.pdf_bytes,
-            file_name="Quadratic_Master_Worksheet.pdf",
+            file_name=f"Quadratic_Master_Worksheet_{current_time}.pdf",
             mime="application/pdf",
             use_container_width=True,
             type="primary"
