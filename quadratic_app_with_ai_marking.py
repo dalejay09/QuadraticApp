@@ -496,7 +496,13 @@ else:
                         if st.button("Submit Working for AI Marking", use_container_width=True, type="primary"):
                             with st.spinner("Gemini is checking your algebra..."):
                                 try:
+                                    # 1. Open the image
                                     img = Image.open(picture)
+
+                                    # 2. Compress it! This shrinks the image while keeping the aspect ratio
+                                    img.thumbnail((1024,1024))
+
+                                    # 3. Connect to the client
                                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                                     
                                     target_eq = st.session_state.math_data[9]
