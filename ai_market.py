@@ -36,9 +36,9 @@ if picture:
                 4. If they made a mistake, gently explain exactly where they went wrong, but do not just give them the final answer immediately—guide them on what to do next.
                 """
                 
-                # 5. Send the prompt AND the image to Gemini 2.5 Flash
+                # 5. Send the prompt AND the image to the updated Gemini 3.6 Flash model
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-3.6-flash',
                     contents=[prompt, img]
                 )
                 
