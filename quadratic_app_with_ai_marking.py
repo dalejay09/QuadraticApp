@@ -490,7 +490,7 @@ else:
                             st.session_state.ai_feedback = ""
                             st.rerun()
                 else:
-                    picture = st.camera_input("Snap a photo of your working:")
+                    picture = st.file_uploader("Snap a photo of your working:", type=['png', 'jpg', 'jpeg'])
                     
                     if picture:
                         if st.button("Submit Working for AI Marking", use_container_width=True, type="primary"):
