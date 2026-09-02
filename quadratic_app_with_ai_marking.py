@@ -362,7 +362,7 @@ if 'ai_is_correct' not in st.session_state:
 if 'show_camera' not in st.session_state:
     st.session_state.show_camera = False
 
-st.title("Quadratic Finder")
+st.title("Quadratic Tutor")
 
 # 1. Flattened PDF Controls & Settings 
 if 'pdf_bytes' not in st.session_state:
