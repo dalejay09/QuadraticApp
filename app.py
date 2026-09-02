@@ -5,11 +5,8 @@ import numpy as np
 import random
 import time
 import io
-import re
-from PIL import Image
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
-from google import genai
 
 def fmt_a(a):
     if a == 1: return ""
@@ -350,17 +347,7 @@ def create_pdf_bytes():
     return buffer.getvalue()
 
 
-# --- Streamlit UI Initializations ---
-if 'generating' not in st.session_state:
-    st.session_state.generating = True
-if 'guessed_form_correctly' not in st.session_state:
-    st.session_state.guessed_form_correctly = False
-if 'ai_feedback' not in st.session_state:
-    st.session_state.ai_feedback = ""
-if 'ai_is_correct' not in st.session_state:
-    st.session_state.ai_is_correct = False
-if 'show_camera' not in st.session_state:
-    st.session_state.show_camera = False
+# --- Streamlit UI ---
 
 st.title("Quadratic Finder")
 
@@ -379,7 +366,6 @@ if st.session_state.pdf_bytes is None:
         with st.popover("⚙️", use_container_width=True):
             st.write("**Settings**")
             st.toggle("Show Grid Lines", key="show_grid")
-            st.toggle("Mark My Working", key="mark_working")
 else:
     col_dl, col_rs, col_set = st.columns([3, 3, 1])
     with col_dl:
@@ -400,9 +386,11 @@ else:
         with st.popover("⚙️", use_container_width=True):
             st.write("**Settings**")
             st.toggle("Show Grid Lines", key="show_grid")
-            st.toggle("Mark My Working", key="mark_working")
 
 # 2. Flattened App Content
+if 'generating' not in st.session_state:
+    st.session_state.generating = True
+
 col_toggle1, col_toggle2 = st.columns(2)
 with col_toggle1:
     show_labels = st.toggle("Coordinates", value=False)
@@ -415,31 +403,27 @@ st.latex(r"") # Preloads KaTeX engine
 if st.session_state.generating:
     st.info("Drawing next parabola... please wait.")
     st.session_state.math_data = generate_math_data()
-    st.session_state.guessed_form_correctly = False
+    st.session_state.answered = False
     st.session_state.feedback = ""
-    st.session_state.ai_feedback = ""
-    st.session_state.ai_is_correct = False
-    st.session_state.show_camera = False
     st.session_state.generating = False
     st.rerun()
     
 else:
-    # Dynamically draw the figure based on current toggle states
-    fig = draw_parabola_fig(st.session_state.math_data, show_labels, st.session_state.get("show_grid", False))
+    # Dynamically draw the figure based on the current toggle states
+    fig = draw_parabola_fig(st.session_state.math_data, show_labels, st.session_state.show_grid)
     st.pyplot(fig)
 
-    # Extract correct answers and steps
+    # Extract correct answers and steps from session state data
     correct = st.session_state.math_data[7]
     steps = st.session_state.math_data[8]
 
-    # STAGE 1: Guessing the general form
-    if not st.session_state.guessed_form_correctly:
+    if not st.session_state.answered:
         c1, c2, c3 = st.columns(3)
         
         def check_ans(guess):
             if guess in correct:
-                st.session_state.guessed_form_correctly = True
-                st.session_state.feedback = "✅ Correct form chosen!"
+                st.session_state.answered = True
+                st.session_state.feedback = "✅ Correct!"
             else:
                 st.session_state.feedback = "❌ Try again! Look closely at the points."
 
@@ -449,4 +433,16 @@ else:
 
         c1.button(btn_vertex, on_click=check_ans, args=("Vertex",), use_container_width=True)
         c2.button(btn_intercept, on_click=check_ans, args=("Intercept",), use_container_width=True)
-        c3.button(btn_standard, on_click=check_ans, args=("Standard",), use_cont
+        c3.button(btn_standard, on_click=check_ans, args=("Standard",), use_container_width=True)
+
+    if st.session_state.feedback:
+        if "Correct" in st.session_state.feedback: 
+            st.success(st.session_state.feedback)
+        else: 
+            st.error(st.session_state.feedback)
+
+    if st.session_state.answered:
+        st.info(steps)
+        if st.button("Next Parabola", use_container_width=True):
+            st.session_state.generating = True
+            st.rerun()
