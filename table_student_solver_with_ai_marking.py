@@ -97,16 +97,18 @@ def draw_table_image(x_vals, y_vals):
         
     # NEW ROBUST SAVE METHOD FOR CLOUD DEPLOYMENTS
     buf = io.BytesIO()
-    
-    # Force a solid white background so black text doesn't vanish on dark themes
     plt.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
     plt.close(fig)
-    buf.seek(0)
     
-    # The .copy() command physically loads the pixels into memory 
-    # before the temporary buffer is destroyed!
-    img = Image.open(buf).convert('RGBA').copy()
-    return img
+    # 1. Create a raw text string of the image for the frontend Canvas
+    img_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+    data_uri = f"data:image/png;base64,{img_str}"
+    
+    # 2. Create the standard PIL Image for the AI Marker backend
+    buf.seek(0)
+    pil_image = Image.open(buf).convert('RGBA').copy()
+    
+    return pil_image, data_uri
     
 # --- Dynamic Plotting Engine: PDF TABLE MAKER (With Markup Capabilities) ---
 def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
@@ -312,8 +314,9 @@ st.latex(r"")
 if st.session_state.generating:
     st.info("Drawing next table... please wait.")
     st.session_state.math_data = generate_table_data()
-    # Generate the table image background once per problem
-    st.session_state.bg_image = draw_table_image(st.session_state.math_data[1], st.session_state.math_data[2])
+    
+    # Catch BOTH the PIL Image and the Data URI string!
+    st.session_state.bg_image, st.session_state.bg_uri = draw_table_image(st.session_state.math_data[1], st.session_state.math_data[2])
     
     st.session_state.identified_correctly = False
     st.session_state.feedback = ""
@@ -331,12 +334,12 @@ else:
     st.write("Mark up the table below (using your finger/mouse) to find the differences or multiplier.")
 
     
-    # --- The Digital Canvas ---
+# --- The Digital Canvas ---
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3,
         stroke_color="#1E90FF",
-        background_image=st.session_state.bg_image,
+        background_image=st.session_state.bg_uri, # Pass the raw string instead of the PIL image!
         update_streamlit=True,
         height=400,
         width=600,
