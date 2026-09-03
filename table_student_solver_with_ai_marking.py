@@ -13,19 +13,6 @@ from matplotlib.backends.backend_pdf import PdfPages
 from google import genai
 from streamlit_drawable_canvas import st_canvas
 
-# --- MONKEY PATCH FOR NEW STREAMLIT VERSIONS ---
-# Streamlit removed the internal 'image_to_url' function that st_canvas relies on.
-# This dynamically recreates it by encoding the background image into a base64 string!
-import streamlit.elements.image as st_image
-if not hasattr(st_image, "image_to_url"):
-    def patched_image_to_url(image, *args, **kwargs):
-        buffered = io.BytesIO()
-        image.save(buffered, format="PNG")
-        img_str = base64.b64encode(buffered.getvalue()).decode()
-        return f"data:image/png;base64,{img_str}"
-    st_image.image_to_url = patched_image_to_url
-# -----------------------------------------------
-
 # --- Formatting Helpers ---
 def fmt_num(n):
     return int(n) if n == int(n) else n
@@ -343,8 +330,6 @@ else:
     
     st.write("Mark up the table below (using your finger/mouse) to find the differences or multiplier.")
 
-
-    st.image(st.session_state.bg_image)
     
     # --- The Digital Canvas ---
     canvas_result = st_canvas(
