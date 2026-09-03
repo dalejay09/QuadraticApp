@@ -11,24 +11,32 @@ from PIL import Image
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 from google import genai
-
-# --- THE BRUTE-FORCE MONKEY PATCH ---
-# Forcefully overwrite Streamlit's image URL generator to ALWAYS use Base64 strings.
-# This completely bypasses the Streamlit Cloud CORS / Media Manager blocks!
-import streamlit.elements.image as st_image
-def patched_image_to_url(image, *args, **kwargs):
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode()
-    return f"data:image/png;base64,{img_str}"
-st_image.image_to_url = patched_image_to_url
-# ------------------------------------
-
 from streamlit_drawable_canvas import st_canvas
 
 # --- Formatting Helpers ---
 def fmt_num(n):
     return int(n) if n == int(n) else n
+
+# --- THE TROJAN HORSE ---
+# Converts our PIL image into a raw Fabric.js drawing object
+def create_fabric_json(pil_image):
+    buffered = io.BytesIO()
+    pil_image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    
+    return {
+        "version": "4.4.0",
+        "objects": [{
+            "type": "image",
+            "left": 0,
+            "top": 0,
+            "width": pil_image.width,
+            "height": pil_image.height,
+            "src": f"data:image/png;base64,{img_str}",
+            "selectable": False, # Locks the image so students can't drag it
+            "evented": False     # Prevents hover/click glitches
+        }]
+    }
 
 # --- Core Math Engine: TABLES ---
 def generate_table_data():
@@ -328,11 +336,13 @@ else:
     st.write("Mark up the table below (using your finger/mouse) to find the differences or multiplier.")
     
     # --- The Digital Canvas ---
+    # We NO LONGER pass a background image! We pass the table as drawing ink!
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3,
         stroke_color="#1E90FF",
-        background_image=st.session_state.bg_image,
+        background_color="#ffffff", # Force a crisp white background
+        initial_drawing=create_fabric_json(st.session_state.bg_image), # The Trojan Horse!
         update_streamlit=True,
         height=400,
         width=600,
@@ -414,9 +424,10 @@ else:
                                     # Image 2: The Digital Canvas
                                     canvas_img = None
                                     if canvas_result.image_data is not None:
+                                        # The canvas data inherently includes our table now!
                                         canvas_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
-                                        bg = st.session_state.bg_image.convert("RGBA")
-                                        canvas_img = Image.alpha_composite(bg, canvas_img).convert("RGB")
+                                        white_bg = Image.new("RGBA", canvas_img.size, "WHITE")
+                                        canvas_img = Image.alpha_composite(white_bg, canvas_img).convert("RGB")
                                     
                                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                                     prompt = f"""
