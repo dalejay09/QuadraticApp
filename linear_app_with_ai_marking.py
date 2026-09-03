@@ -313,6 +313,7 @@ if st.session_state.pdf_bytes is None:
             st.write("**Settings**")
             st.toggle("Show Grid Lines", key="show_grid")
             st.toggle("Mark My Working", key="mark_working")
+            st.radio("Camera Mode", ["App Camera", "Native Camera"], key="camera_mode")
 else:
     col_dl, col_rs, col_set = st.columns([3, 3, 1])
     with col_dl:
@@ -334,6 +335,7 @@ else:
             st.write("**Settings**")
             st.toggle("Show Grid Lines", key="show_grid")
             st.toggle("Mark My Working", key="mark_working")
+            st.radio("Camera Mode", ["App Camera", "Native Camera"], key="camera_mode")
 
 # 2. Main App Content 
 col_toggle1, col_toggle2 = st.columns(2)
@@ -419,7 +421,12 @@ else:
                             st.session_state.ai_feedback = ""
                             st.rerun()
                 else:
-                    picture = st.camera_input("Snap a photo of your working:")
+                    if st.session_state.get("camera_mode", "App Camera") == "App Camera":
+                        picture = st.camera_input("Snap a photo of your working:")
+                    else:
+                        picture = st.file_uploader("Snap a photo (Native Camera) or upload:", type=['png', 'jpg', 'jpeg'])
+                        if picture:
+                            st.image(picture, caption="Submitted Working", use_column_width=True)
                     
                     if picture:
                         if st.button("Submit Working for AI Marking", use_container_width=True, type="primary"):
