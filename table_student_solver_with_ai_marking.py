@@ -86,19 +86,29 @@ def generate_table_data():
 
 # --- Dynamic Plotting Engine: TABLE IMAGE (For Web App Canvas) ---
 def draw_table_image(x_vals, y_vals):
+    # Create a blank figure to act as the canvas background
     fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
+    
+    # CRITICAL FIX: Lock the axes bounds so Matplotlib doesn't collapse them!
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
     ax.axis('off')
     
+    # Draw a clean table structure on the left side
     ax.text(0.1, 0.9, "x", fontsize=20, fontweight='bold', ha='center')
     ax.text(0.3, 0.9, "y", fontsize=20, fontweight='bold', ha='center')
-    ax.plot([0.0, 0.4], [0.85, 0.85], color='black', lw=2)
+    ax.plot([0.0, 0.4], [0.85, 0.85], color='black', lw=2) # Header line
     
+    # Fill in the data values
     y_pos = 0.75
     for x, y in zip(x_vals, y_vals):
         ax.text(0.1, y_pos, str(fmt_num(x)), fontsize=16, ha='center', va='center')
         ax.text(0.3, y_pos, str(fmt_num(y)), fontsize=16, ha='center', va='center')
         y_pos -= 0.15
         
+    # The right 60% of the image is left completely blank for student drawing!
+    
+    # Convert Matplotlib figure to PIL Image
     fig.canvas.draw()
     img_array = np.array(fig.canvas.renderer.buffer_rgba())
     plt.close(fig)
