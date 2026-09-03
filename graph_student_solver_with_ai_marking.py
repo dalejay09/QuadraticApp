@@ -103,6 +103,22 @@ def generate_quadratic_data():
         a_coef_scaled = M
         b_cancel_str = f"({b_coef_1}b - {abs(b_coef_1)}b)" if b_coef_1 > 0 else f"(-{abs(b_coef_1)}b + {abs(b_coef_1)}b)"
         a_sum = a_coef_1 + a_coef_scaled
+
+        # DYNAMIC CHECK: If random points gave us special features, they are more efficient!
+        correct = ['Standard']
+        
+        # 1. Did we accidentally plot two x-intercepts?
+        if sum(1 for p in points if p[1] == 0) >= 2:
+            correct.append('Intercept')
+            
+        # 2. Did we accidentally plot the vertex?
+        vx = -b / (2 * a)
+        if any(p[0] == vx for p in points):
+            correct.append('Vertex')
+            
+        # 3. If we found a more efficient form, Standard is no longer the right choice!
+        if len(correct) > 1:
+            correct.remove('Standard')
         
         steps = (f"**Standard Form**\n\n"
                  f"1. Y-Int $(0, {c}) \\Rightarrow c = {c}$.\n"
@@ -117,7 +133,15 @@ def generate_quadratic_data():
                  f"6. Substitute $a = {fmt_num(a)}$ back into Eq. 2:\n"
                  f"$\\quad {fmt_num(a)} {'+' if px2 > 0 else '-'} b = {fmt_num(Y2)} \\Rightarrow b = {b}$\n\n"
                  f"**${eq}$**")
+        
         correct = ['Standard']
+        # DYNAMIC CHECK: If the random points gave us two roots or the vertex by coincidence, accept them!
+        if sum(1 for p in points if p[1] == 0) >= 2:
+            correct.append('Intercept')
+            
+        vx = -b / (2 * a)
+        if any(p[0] == vx for p in points):
+            correct.append('Vertex')
 
     elif form == 'equal_both':
         h = random.randint(-3, 3)
