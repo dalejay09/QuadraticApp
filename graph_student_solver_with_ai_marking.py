@@ -202,7 +202,6 @@ def generate_linear_data():
         y1 = m * x1 + c
         points = [(x1, y1)]
 
-    # Sort points for visual consistency (left to right)
     if len(points) == 2 and points[0][0] > points[1][0]:
         points[0], points[1] = points[1], points[0]
         x1, y1 = points[0]
@@ -213,7 +212,6 @@ def generate_linear_data():
     c_str = "" if c == 0 else f" + {fmt_num(c)}" if c > 0 else f" - {fmt_num(abs(c))}"
     eq = f"y = {m_str}x{c_str}"
     
-    # Step-by-step logic
     if scenario == 'point_grad':
         steps = (f"**Straight Line Equation**\n\n"
                  f"1. Gradient $m = {fmt_num(m)}$ (given).\n"
@@ -235,7 +233,6 @@ def generate_linear_data():
     x_pad, y_pad = max(2.0, (max(all_x) - min(all_x)) * 0.2), max(2.0, (max(all_y) - min(all_y)) * 0.2)
     x_vals = np.linspace(min(all_x) - x_pad - 2, max(all_x) + x_pad + 2, 400)
     
-    # Exhaustive Feature Identification Logic
     all_features = [
         "positive gradient", "negative gradient", 
         "x-intercept given", "y-intercept given", 
@@ -450,7 +447,6 @@ def create_pdf_bytes(mode, show_grid_pdf):
                     ax_app.text(x_pos, y_pos, f"Q{q_num+1}:\n{steps_clean}", fontsize=8.5, va='top')
                 pdf.savefig(fig_app); plt.close(fig_app)
 
-
         # --- LINEAR SECTION ---
         if mode in ["Linear", "Both"]:
             problems_l = [generate_linear_data() for _ in range(20)]
@@ -552,7 +548,8 @@ if st.session_state.pdf_bytes is None:
         with st.popover("⚙️", use_container_width=True):
             st.write("**Settings**")
             st.radio("Function Mode", ["Quadratic", "Linear", "Both"], key="func_mode", on_change=handle_settings_change)
-            st.radio("Camera Mode", ["Off", "On"], key="camera_mode", horizontal=True)
+            st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
+            st.toggle("Mark My Working", key="mark_working")
             st.toggle("Show Grid Lines", key="show_grid", on_change=handle_settings_change)
 else:
     col_dl, col_rs, col_set = st.columns([3, 3, 1])
@@ -574,7 +571,8 @@ else:
         with st.popover("⚙️", use_container_width=True):
             st.write("**Settings**")
             st.radio("Function Mode", ["Quadratic", "Linear", "Both"], key="func_mode", on_change=handle_settings_change)
-            st.radio("Camera Mode", ["Off", "On"], key="camera_mode", horizontal=True)
+            st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
+            st.toggle("Mark My Working", key="mark_working")
             st.toggle("Show Grid Lines", key="show_grid", on_change=handle_settings_change)
 
 # 2. Main App Content 
@@ -663,7 +661,7 @@ else:
     else:
         st.success(st.session_state.feedback)
         
-        if st.session_state.get('camera_mode', 'Off') == 'Off':
+        if not st.session_state.get('mark_working', False):
             st.info(steps)
             if st.button("Next Graph", use_container_width=True):
                 st.session_state.generating = True
@@ -692,7 +690,11 @@ else:
                             st.session_state.ai_feedback = ""
                             st.rerun()
                 else:
-                    picture = st.camera_input("Snap a photo of your working:")
+                    cam_mode = st.session_state.get('camera_mode', 'App')
+                    if cam_mode == 'App':
+                        picture = st.camera_input("Snap a photo of your working:")
+                    else:
+                        picture = st.file_uploader("Upload or snap a photo of your working:", type=['png', 'jpg', 'jpeg'])
                     
                     if picture:
                         if st.button("Submit Working for AI Marking", use_container_width=True, type="primary"):
