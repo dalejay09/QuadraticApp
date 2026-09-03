@@ -658,8 +658,13 @@ else:
 
     st.pyplot(fig)
 
-    # STAGE 1: Identifying Graph Features / Form
+# STAGE 1: Identifying Graph Features / Form
     if not st.session_state.identified_correctly:
+        
+        # Fix: Print the linear prompt to the main page BEFORE creating the columns
+        if prob_type == 'Linear':
+            st.write("**Which of these features applies to the graph?**")
+            
         c1, c2, c3 = st.columns(3)
         
         def check_feat(guess):
@@ -677,7 +682,6 @@ else:
             c2.button(btn_i, on_click=check_feat, args=("Intercept",), use_container_width=True)
             c3.button(btn_s, on_click=check_feat, args=("Standard",), use_container_width=True)
         else:
-            st.write("**Which of these features applies to the graph?**")
             c1.button(btn_choices[0], on_click=check_feat, args=(btn_choices[0],), use_container_width=True, key="lb1")
             c2.button(btn_choices[1], on_click=check_feat, args=(btn_choices[1],), use_container_width=True, key="lb2")
             c3.button(btn_choices[2], on_click=check_feat, args=(btn_choices[2],), use_container_width=True, key="lb3")
