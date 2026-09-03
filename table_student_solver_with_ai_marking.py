@@ -342,6 +342,9 @@ else:
     show_equations_state = st.session_state.get('show_equations', True)
     
     st.write("Mark up the table below (using your finger/mouse) to find the differences or multiplier.")
+
+
+    st.image(st.session_state.bg_image)
     
     # --- The Digital Canvas ---
     canvas_result = st_canvas(
