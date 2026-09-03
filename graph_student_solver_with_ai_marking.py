@@ -568,6 +568,21 @@ if 'pdf_bytes' not in st.session_state:
     
 st.title("Student Graph Solver")
 
+# Custom CSS to make primary buttons a friendly, calming blue
+st.markdown("""
+    <style>
+    div.stButton > button[kind="primary"] {
+        background-color: #1E90FF; /* Dodger Blue */
+        color: white;
+        border: none;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #0073e6; /* Slightly darker blue on hover */
+        border: none;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # Helper function to render identical settings cog in both layout states
 def render_settings_cog():
     with st.popover("⚙️", use_container_width=True):
