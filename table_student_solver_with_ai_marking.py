@@ -18,7 +18,6 @@ def fmt_num(n):
     return int(n) if n == int(n) else n
 
 # --- THE TROJAN HORSE ---
-# Converts our PIL image into a raw Fabric.js drawing object
 def create_fabric_json(pil_image):
     buffered = io.BytesIO()
     pil_image.save(buffered, format="PNG")
@@ -33,8 +32,8 @@ def create_fabric_json(pil_image):
             "width": pil_image.width,
             "height": pil_image.height,
             "src": f"data:image/png;base64,{img_str}",
-            "selectable": False, # Locks the image so students can't drag it
-            "evented": False     # Prevents hover/click glitches
+            "selectable": False, 
+            "evented": False     
         }]
     }
 
@@ -113,7 +112,7 @@ def generate_table_data():
                  f"4. The 1st difference ($x=0$ to $1$) is $a(r-1)$. So, $a = {fmt_num(first_diff_0)} \\div ({r}-1) = {fmt_num(a)}$.\n"
                  f"5. The $y$-intercept when $x=0$ is $a + c$. So, $c = {fmt_num(y_vals[0])} - {fmt_num(a)} = {fmt_num(c)}$.\n\n"
                  f"**${eq}$**")
-    
+
     return func_type, list(x_vals), list(y_vals), steps, eq
 
 # --- Dynamic Plotting Engine: TABLE IMAGE (For Web App Canvas) ---
@@ -157,7 +156,7 @@ def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
         ax.text(0.15, y_pos[i], str(fmt_num(x)), fontsize=10, ha='center', va='center')
         ax.text(0.35, y_pos[i], str(fmt_num(y)), fontsize=10, ha='center', va='center')
         
-if show_markup:
+    if show_markup:
         diff1 = [y_vals[i+1] - y_vals[i] for i in range(4)]
         
         for i in range(4):
@@ -301,7 +300,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Helper function to render identical settings cog
+# Helper function to render settings cog
 def render_settings_cog():
     with st.popover("⚙️ Settings", use_container_width=True):
         st.radio("Study Mode", ["Recognise", "Solve"], key="study_mode", on_change=apply_study_mode)
@@ -363,13 +362,12 @@ else:
     st.write("Mark up the table below (using your finger/mouse) to find the differences or multiplier.")
     
     # --- The Digital Canvas ---
-    # We NO LONGER pass a background image! We pass the table as drawing ink!
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3,
         stroke_color="#1E90FF",
-        background_color="#ffffff", # Force a crisp white background
-        initial_drawing=create_fabric_json(st.session_state.bg_image), # The Trojan Horse!
+        background_color="#ffffff",
+        initial_drawing=create_fabric_json(st.session_state.bg_image),
         update_streamlit=True,
         height=400,
         width=600,
@@ -377,7 +375,7 @@ else:
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
-# STAGE 1: Identifying Function Family
+    # STAGE 1: Identifying Function Family
     if not st.session_state.identified_correctly:
         st.write("**What family does this function belong to?**")
         
@@ -457,7 +455,6 @@ else:
                                     # Image 2: The Digital Canvas
                                     canvas_img = None
                                     if canvas_result.image_data is not None:
-                                        # The canvas data inherently includes our table now!
                                         canvas_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
                                         white_bg = Image.new("RGBA", canvas_img.size, "WHITE")
                                         canvas_img = Image.alpha_composite(white_bg, canvas_img).convert("RGB")
