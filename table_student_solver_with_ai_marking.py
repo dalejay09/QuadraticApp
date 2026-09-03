@@ -1,12 +1,11 @@
 import streamlit as st
 import matplotlib
-matplotlib.use('Agg') # CRITICAL: Forces Matplotlib to draw on headless servers
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import random
 import io
 import re
-import base64
 from PIL import Image
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
@@ -74,41 +73,30 @@ def generate_table_data():
     return func_type, list(x_vals), list(y_vals), steps, eq
 
 # --- Dynamic Plotting Engine: TABLE IMAGE (For Web App Canvas) ---
-# --- Dynamic Plotting Engine: TABLE IMAGE (For Web App Canvas) ---
 def draw_table_image(x_vals, y_vals):
     fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
     
-    # Lock the axes bounds
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis('off')
     
-    # Draw table structure
     ax.text(0.1, 0.9, "x", fontsize=20, fontweight='bold', ha='center')
     ax.text(0.3, 0.9, "y", fontsize=20, fontweight='bold', ha='center')
     ax.plot([0.0, 0.4], [0.85, 0.85], color='black', lw=2)
     
-    # Fill in the data values
     y_pos = 0.75
     for x, y in zip(x_vals, y_vals):
         ax.text(0.1, y_pos, str(fmt_num(x)), fontsize=16, ha='center', va='center')
         ax.text(0.3, y_pos, str(fmt_num(y)), fontsize=16, ha='center', va='center')
         y_pos -= 0.15
         
-    # NEW ROBUST SAVE METHOD FOR CLOUD DEPLOYMENTS
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
     plt.close(fig)
-    
-    # 1. Create a raw text string of the image for the frontend Canvas
-    img_str = base64.b64encode(buf.getvalue()).decode("utf-8")
-    data_uri = f"data:image/png;base64,{img_str}"
-    
-    # 2. Create the standard PIL Image for the AI Marker backend
     buf.seek(0)
-    pil_image = Image.open(buf).convert('RGBA').copy()
     
-    return pil_image, data_uri
+    img = Image.open(buf).convert('RGBA').copy()
+    return img
     
 # --- Dynamic Plotting Engine: PDF TABLE MAKER (With Markup Capabilities) ---
 def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
@@ -116,7 +104,6 @@ def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
     ax.set_ylim(0, 1)
     ax.axis('off')
     
-    # Base Table structure
     ax.text(0.15, 0.9, "x", fontsize=11, fontweight='bold', ha='center')
     ax.text(0.35, 0.9, "y", fontsize=11, fontweight='bold', ha='center')
     ax.plot([0.05, 0.45], [0.82, 0.82], color='black', lw=1.5)
@@ -126,11 +113,9 @@ def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
         ax.text(0.15, y_pos[i], str(fmt_num(x)), fontsize=10, ha='center', va='center')
         ax.text(0.35, y_pos[i], str(fmt_num(y)), fontsize=10, ha='center', va='center')
         
-    # Programmatic Blue/Orange Marker Drawings!
     if show_markup:
         diff1 = [y_vals[i+1] - y_vals[i] for i in range(4)]
         
-        # Draw 1st Differences (Blue Arcs)
         for i in range(4):
             ys, ye = y_pos[i], y_pos[i+1]
             ymid = (ys + ye) / 2
@@ -147,7 +132,6 @@ def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
                 ratio = y_vals[i+1] / y_vals[i]
                 ax.text(0.65, ymid, f"×{fmt_num(ratio)}", color='#1E90FF', fontsize=10, va='center', fontweight='bold')
 
-        # Draw 2nd Differences (Orange Arcs)
         if func_type == 'Quadratic':
             diff2 = [diff1[i+1] - diff1[i] for i in range(3)]
             for i in range(3):
@@ -158,7 +142,6 @@ def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
                             arrowprops=dict(arrowstyle="-", connectionstyle="arc3,rad=-0.4", color='#FF4500', lw=1.5))
                 lbl = f"+{fmt_num(diff2[i])}" if diff2[i] >= 0 else str(fmt_num(diff2[i]))
                 ax.text(0.85, ymid, lbl, color='#FF4500', fontsize=10, va='center', fontweight='bold')
-
 
 # --- Unified PDF Generation Engine ---
 def create_pdf_bytes():
@@ -183,7 +166,6 @@ def create_pdf_bytes():
         for i, ax in enumerate(axes2.flatten()):
             func_type, x_vals, y_vals, steps, target_eq = problems[i]
             draw_pdf_table(ax, x_vals, y_vals, func_type=func_type, show_markup=True)
-            # Display target equation directly beneath each table on the visual key
             ax.set_title(f"Q{i+1}: {func_type}\n${target_eq}$", loc='left', fontsize=8, pad=2)
         pdf.savefig(fig2); plt.close(fig2)
         
@@ -271,7 +253,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Helper function to render identical settings cog in both layout states
+# Helper function to render identical settings cog
 def render_settings_cog():
     with st.popover("⚙️ Settings", use_container_width=True):
         st.radio("Study Mode", ["Recognise", "Solve"], key="study_mode", on_change=apply_study_mode)
@@ -314,16 +296,14 @@ st.latex(r"")
 if st.session_state.generating:
     st.info("Drawing next table... please wait.")
     st.session_state.math_data = generate_table_data()
-    
-    # Catch BOTH the PIL Image and the Data URI string!
-    st.session_state.bg_image, st.session_state.bg_uri = draw_table_image(st.session_state.math_data[1], st.session_state.math_data[2])
+    st.session_state.bg_image = draw_table_image(st.session_state.math_data[1], st.session_state.math_data[2])
     
     st.session_state.identified_correctly = False
     st.session_state.feedback = ""
     st.session_state.ai_feedback = ""
     st.session_state.ai_is_correct = False
     st.session_state.show_camera = False
-    st.session_state.canvas_key += 1 # Forces the canvas to wipe clean
+    st.session_state.canvas_key += 1 
     st.session_state.generating = False
     st.rerun()
     
@@ -332,14 +312,13 @@ else:
     show_equations_state = st.session_state.get('show_equations', True)
     
     st.write("Mark up the table below (using your finger/mouse) to find the differences or multiplier.")
-
     
-# --- The Digital Canvas ---
+    # --- The Digital Canvas ---
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3,
         stroke_color="#1E90FF",
-        background_image=st.session_state.bg_uri, # Pass the raw string instead of the PIL image!
+        background_image=st.session_state.bg_image,
         update_streamlit=True,
         height=400,
         width=600,
