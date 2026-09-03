@@ -1,3 +1,4 @@
 matplotlib
 numpy
 google-genai
+streamlit-drawable-canvas
