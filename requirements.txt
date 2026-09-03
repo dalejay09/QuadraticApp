@@ -3,4 +3,4 @@ matplotlib
 numpy
 Pillow
 google-genai
-streamlit-drawable-canvas-fix
+streamlit-drawable-canvas
