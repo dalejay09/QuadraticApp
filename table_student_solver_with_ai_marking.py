@@ -1,4 +1,6 @@
 import streamlit as st
+import matplotlib
+matplotlib.use('Agg') # CRITICAL: Forces Matplotlib to draw on headless servers
 import matplotlib.pyplot as plt
 import numpy as np
 import random
@@ -108,12 +110,16 @@ def draw_table_image(x_vals, y_vals):
         
     # NEW ROBUST SAVE METHOD FOR CLOUD DEPLOYMENTS
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=100)
+    
+    # Force a solid white background so black text doesn't vanish on dark themes
+    plt.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
     plt.close(fig)
     buf.seek(0)
     
-    # .convert('RGBA') forces PIL to load the data into memory safely before the buffer closes
-    return Image.open(buf).convert('RGBA')
+    # The .copy() command physically loads the pixels into memory 
+    # before the temporary buffer is destroyed!
+    img = Image.open(buf).convert('RGBA').copy()
+    return img
     
 # --- Dynamic Plotting Engine: PDF TABLE MAKER (With Markup Capabilities) ---
 def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
