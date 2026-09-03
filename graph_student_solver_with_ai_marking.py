@@ -273,10 +273,12 @@ def draw_parabola_fig(math_data, show_labels_val, show_grid_val):
         ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
         ax.grid(True, linestyle=':', alpha=0.6)
         ax.set_axisbelow(True)
-        ax.set_xticklabels([]); ax.set_yticklabels()
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
         ax.tick_params(which='both', length=0)
     else:
-        ax.set_xticks([]); ax.set_yticks([])
+        ax.set_xticks([])
+        ax.set_yticks([])
 
     ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=2)
     for px, py in points:
@@ -306,10 +308,12 @@ def draw_line_fig(math_data, show_labels_val, show_grid_val):
         ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
         ax.grid(True, linestyle=':', alpha=0.6)
         ax.set_axisbelow(True)
-        ax.set_xticklabels([]); ax.set_yticklabels([])
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
         ax.tick_params(which='both', length=0)
     else:
-        ax.set_xticks([]); ax.set_yticks([])
+        ax.set_xticks([])
+        ax.set_yticks([])
 
     ax.plot(x_vals, f(x_vals), color='darkblue', linewidth=2)
     for px, py in points:
@@ -531,7 +535,7 @@ if 'ai_is_correct' not in st.session_state:
 if 'show_camera' not in st.session_state:
     st.session_state.show_camera = False
 
-st.title("Graphing Equation Finder")
+st.title("Student Graph Solver")
 
 # 1. Flattened PDF Controls & Settings 
 if 'pdf_bytes' not in st.session_state:
@@ -548,8 +552,8 @@ if st.session_state.pdf_bytes is None:
         with st.popover("⚙️", use_container_width=True):
             st.write("**Settings**")
             st.radio("Function Mode", ["Quadratic", "Linear", "Both"], key="func_mode", on_change=handle_settings_change)
+            st.radio("Camera Mode", ["Off", "On"], key="camera_mode", horizontal=True)
             st.toggle("Show Grid Lines", key="show_grid", on_change=handle_settings_change)
-            st.toggle("Mark My Working", key="mark_working")
 else:
     col_dl, col_rs, col_set = st.columns([3, 3, 1])
     with col_dl:
@@ -570,8 +574,8 @@ else:
         with st.popover("⚙️", use_container_width=True):
             st.write("**Settings**")
             st.radio("Function Mode", ["Quadratic", "Linear", "Both"], key="func_mode", on_change=handle_settings_change)
+            st.radio("Camera Mode", ["Off", "On"], key="camera_mode", horizontal=True)
             st.toggle("Show Grid Lines", key="show_grid", on_change=handle_settings_change)
-            st.toggle("Mark My Working", key="mark_working")
 
 # 2. Main App Content 
 col_toggle1, col_toggle2 = st.columns(2)
@@ -659,7 +663,7 @@ else:
     else:
         st.success(st.session_state.feedback)
         
-        if not st.session_state.get('mark_working', False):
+        if st.session_state.get('camera_mode', 'Off') == 'Off':
             st.info(steps)
             if st.button("Next Graph", use_container_width=True):
                 st.session_state.generating = True
