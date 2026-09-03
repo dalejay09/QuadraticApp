@@ -123,14 +123,15 @@ def draw_table_image(x_vals, y_vals):
     ax.set_ylim(0, 1)
     ax.axis('off')
     
-    ax.text(0.1, 0.9, "x", fontsize=20, fontweight='bold', ha='center')
-    ax.text(0.3, 0.9, "y", fontsize=20, fontweight='bold', ha='center')
-    ax.plot([0.0, 0.4], [0.85, 0.85], color='black', lw=2)
+    # Shifted left and narrowed for mobile touchscreens
+    ax.text(0.08, 0.9, "x", fontsize=20, fontweight='bold', ha='center')
+    ax.text(0.22, 0.9, "y", fontsize=20, fontweight='bold', ha='center')
+    ax.plot([0.02, 0.28], [0.85, 0.85], color='black', lw=2)
     
     y_pos = 0.75
     for x, y in zip(x_vals, y_vals):
-        ax.text(0.1, y_pos, str(fmt_num(x)), fontsize=16, ha='center', va='center')
-        ax.text(0.3, y_pos, str(fmt_num(y)), fontsize=16, ha='center', va='center')
+        ax.text(0.08, y_pos, str(fmt_num(x)), fontsize=16, ha='center', va='center')
+        ax.text(0.22, y_pos, str(fmt_num(y)), fontsize=16, ha='center', va='center')
         y_pos -= 0.15
         
     buf = io.BytesIO()
