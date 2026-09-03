@@ -92,7 +92,7 @@ def generate_math_data():
     x_pad, y_pad = max(2.0, (max(all_x) - min(all_x)) * 0.2), max(2.0, (max(all_y) - min(all_y)) * 0.2)
     x_vals = np.linspace(min(all_x) - x_pad - 2, max(all_x) + x_pad + 2, 400)
     
-    # Feature Identification Logic
+    # Exhaustive Feature Identification Logic
     all_features = [
         "positive gradient", "negative gradient", 
         "x-intercept given", "y-intercept given", 
@@ -107,9 +107,14 @@ def generate_math_data():
         true_features.extend(["gradient given", "only one point given"])
     else:
         true_features.append("two points given")
-        if scenario == 'y_int': true_features.append("y-intercept given")
-        if scenario == 'x_int': true_features.append("x-intercept given")
         
+    # Dynamically scan plotted points to catch coincidental intercepts
+    for px, py in points:
+        if px == 0 and "y-intercept given" not in true_features:
+            true_features.append("y-intercept given")
+        if py == 0 and "x-intercept given" not in true_features:
+            true_features.append("x-intercept given")
+            
     false_features = [feat for feat in all_features if feat not in true_features]
     btn_choices = [random.choice(true_features)] + random.sample(false_features, 2)
     random.shuffle(btn_choices)
@@ -120,6 +125,9 @@ def generate_math_data():
 def draw_line_fig(math_data, show_labels_val, show_grid_val):
     points, f, all_x, all_y, x_pad, y_pad, x_vals, true_features, steps, eq, btn_choices, scenario, m = math_data
     fig, ax = plt.subplots(figsize=(4, 4))
+    
+    x_min, x_max = min(all_x) - x_pad - 2, max(all_x) + x_pad + 2
+    y_min, y_max = min(all_y) - y_pad, max(all_y) + y_pad
     
     if show_grid_val:
         ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
@@ -142,17 +150,20 @@ def draw_line_fig(math_data, show_labels_val, show_grid_val):
                         ha='left', va='bottom', fontsize=10,
                         bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.85))
         
-    ax.spines['left'].set_position('zero'); ax.spines['bottom'].set_position('zero')
-    ax.spines['right'].set_color('none'); ax.spines['top'].set_color('none')
+    # Conditionally draw axes to prevent overlapping borders when outside bounds
+    if x_min <= 0 <= x_max: ax.spines['left'].set_position('zero')
+    else: ax.spines['left'].set_color('none')
     
-    x_min, x_max = min(all_x) - x_pad - 2, max(all_x) + x_pad + 2
-    y_min, y_max = min(all_y) - y_pad, max(all_y) + y_pad
+    if y_min <= 0 <= y_max: ax.spines['bottom'].set_position('zero')
+    else: ax.spines['bottom'].set_color('none')
+        
+    ax.spines['right'].set_color('none')
+    ax.spines['top'].set_color('none')
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(y_min, y_max)
     
     if scenario == 'point_grad':
         x_span, y_span = x_max - x_min, y_max - y_min
-        # Since figsize is square (4x4), the visual slope maps perfectly to the spans
         visual_m = m * (x_span / y_span)
         angle = np.degrees(np.arctan(visual_m))
         x_center = (x_min + x_max) / 2
@@ -179,6 +190,9 @@ def create_pdf_bytes():
         for i, ax in enumerate(axes.flatten()):
             points, f, all_x, all_y, x_pad, y_pad, x_vals, true_features, steps, eq, btn_choices, scenario, m_val = problems[i]
             
+            x_min, x_max = min(all_x) - x_pad - 2, max(all_x) + x_pad + 2
+            y_min, y_max = min(all_y) - y_pad, max(all_y) + y_pad
+            
             if show_grid_pdf:
                 ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
                 ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
@@ -197,17 +211,17 @@ def create_pdf_bytes():
                             ha='left', va='bottom', fontsize=5,
                             bbox=dict(boxstyle='round,pad=0.1', fc='white', ec='none', alpha=0.7))
                 
-            ax.spines['left'].set_position('zero'); ax.spines['bottom'].set_position('zero')
-            ax.spines['right'].set_color('none'); ax.spines['top'].set_color('none')
+            if x_min <= 0 <= x_max: ax.spines['left'].set_position('zero')
+            else: ax.spines['left'].set_color('none')
             
-            x_min, x_max = min(all_x) - x_pad - 2, max(all_x) + x_pad + 2
-            y_min, y_max = min(all_y) - y_pad, max(all_y) + y_pad
-            ax.set_xlim(x_min, x_max)
-            ax.set_ylim(y_min, y_max)
+            if y_min <= 0 <= y_max: ax.spines['bottom'].set_position('zero')
+            else: ax.spines['bottom'].set_color('none')
+                
+            ax.spines['right'].set_color('none'); ax.spines['top'].set_color('none')
+            ax.set_xlim(x_min, x_max); ax.set_ylim(y_min, y_max)
             
             if scenario == 'point_grad':
                 x_span, y_span = x_max - x_min, y_max - y_min
-                # Subplot cell aspect ratio is roughly 1.13 in this 5x4 layout on A4
                 visual_m = m_val * (x_span / y_span) * 1.13
                 angle = np.degrees(np.arctan(visual_m))
                 x_center = (x_min + x_max) / 2
