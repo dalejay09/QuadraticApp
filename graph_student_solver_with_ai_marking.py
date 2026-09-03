@@ -103,22 +103,6 @@ def generate_quadratic_data():
         a_coef_scaled = M
         b_cancel_str = f"({b_coef_1}b - {abs(b_coef_1)}b)" if b_coef_1 > 0 else f"(-{abs(b_coef_1)}b + {abs(b_coef_1)}b)"
         a_sum = a_coef_1 + a_coef_scaled
-
-        # DYNAMIC CHECK: If random points gave us special features, they are more efficient!
-        correct = ['Standard']
-        
-        # 1. Did we accidentally plot two x-intercepts?
-        if sum(1 for p in points if p[1] == 0) >= 2:
-            correct.append('Intercept')
-            
-        # 2. Did we accidentally plot the vertex?
-        vx = -b / (2 * a)
-        if any(p[0] == vx for p in points):
-            correct.append('Vertex')
-            
-        # 3. If we found a more efficient form, Standard is no longer the right choice!
-        if len(correct) > 1:
-            correct.remove('Standard')
         
         steps = (f"**Standard Form**\n\n"
                  f"1. Y-Int $(0, {c}) \\Rightarrow c = {c}$.\n"
@@ -135,13 +119,17 @@ def generate_quadratic_data():
                  f"**${eq}$**")
         
         correct = ['Standard']
-        # DYNAMIC CHECK: If the random points gave us two roots or the vertex by coincidence, accept them!
+        
+        # DYNAMIC CHECK: If random points gave us special features, they are more efficient!
         if sum(1 for p in points if p[1] == 0) >= 2:
             correct.append('Intercept')
             
         vx = -b / (2 * a)
         if any(p[0] == vx for p in points):
             correct.append('Vertex')
+            
+        if len(correct) > 1:
+            correct.remove('Standard')
 
     elif form == 'equal_both':
         h = random.randint(-3, 3)
@@ -540,6 +528,27 @@ def create_pdf_bytes(mode, show_grid_pdf):
 
 
 # --- Streamlit UI Initializations ---
+if 'initialized_study_mode' not in st.session_state:
+    st.session_state.study_mode = "Solve"
+    st.session_state.mark_working = True
+    st.session_state.show_coordinates = True
+    st.session_state.show_grid = True
+    st.session_state.show_equations = True
+    st.session_state.initialized_study_mode = True
+
+def apply_study_mode():
+    st.session_state.pdf_bytes = None
+    st.session_state.generating = True
+    sm = st.session_state.study_mode
+    if sm == "Recognise":
+        st.session_state.show_grid = False
+        st.session_state.mark_working = False
+    elif sm == "Solve":
+        st.session_state.show_grid = True
+        st.session_state.mark_working = True
+        st.session_state.show_coordinates = True
+        st.session_state.show_equations = True
+
 def handle_settings_change():
     st.session_state.pdf_bytes = None
     st.session_state.generating = True
@@ -557,10 +566,19 @@ if 'show_camera' not in st.session_state:
 
 st.title("Student Graph Solver")
 
-# 1. Flattened PDF Controls & Settings 
-if 'pdf_bytes' not in st.session_state:
-    st.session_state.pdf_bytes = None
-    
+# Helper function to render identical settings cog in both layout states
+def render_settings_cog():
+    with st.popover("⚙️", use_container_width=True):
+        st.write("**Settings**")
+        st.radio("Study Mode", ["Recognise", "Solve"], key="study_mode", on_change=apply_study_mode)
+        st.radio("Function Mode", ["Quadratic", "Linear", "Both"], key="func_mode", on_change=handle_settings_change)
+        st.toggle("Mark My Working", key="mark_working")
+        st.toggle("Show Coordinates", key="show_coordinates", on_change=handle_settings_change)
+        st.toggle("Show Grid Lines", key="show_grid", on_change=handle_settings_change)
+        st.toggle("Equation Buttons", key="show_equations")
+        st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
+
+# 1. PDF Controls & Settings Layout
 if st.session_state.pdf_bytes is None:
     col_pdf, col_set = st.columns([5, 1])
     with col_pdf:
@@ -569,12 +587,7 @@ if st.session_state.pdf_bytes is None:
                 st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.get('func_mode', 'Both'), st.session_state.get('show_grid', False))
             st.rerun()
     with col_set:
-        with st.popover("⚙️", use_container_width=True):
-            st.write("**Settings**")
-            st.radio("Function Mode", ["Quadratic", "Linear", "Both"], key="func_mode", on_change=handle_settings_change)
-            st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
-            st.toggle("Mark My Working", key="mark_working")
-            st.toggle("Show Grid Lines", key="show_grid", on_change=handle_settings_change)
+        render_settings_cog()
 else:
     col_dl, col_rs, col_set = st.columns([3, 3, 1])
     with col_dl:
@@ -592,19 +605,7 @@ else:
             st.session_state.pdf_bytes = None
             st.rerun()
     with col_set:
-        with st.popover("⚙️", use_container_width=True):
-            st.write("**Settings**")
-            st.radio("Function Mode", ["Quadratic", "Linear", "Both"], key="func_mode", on_change=handle_settings_change)
-            st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
-            st.toggle("Mark My Working", key="mark_working")
-            st.toggle("Show Grid Lines", key="show_grid", on_change=handle_settings_change)
-
-# 2. Main App Content 
-col_toggle1, col_toggle2 = st.columns(2)
-with col_toggle1:
-    show_labels = st.toggle("Coordinates", value=False)
-with col_toggle2:
-    show_equations = st.toggle("Equation Buttons", value=False) 
+        render_settings_cog()
 
 st.latex(r"") 
 
@@ -635,17 +636,19 @@ if st.session_state.generating:
     
 else:
     prob_type = st.session_state.current_prob_type
+    show_labels_state = st.session_state.get('show_coordinates', True)
+    show_equations_state = st.session_state.get('show_equations', True)
     
     # Dynamic Heading
     if prob_type == 'Quadratic':
         st.write("Which general form is most efficient for this parabola?")
-        fig = draw_parabola_fig(st.session_state.math_data, show_labels, st.session_state.get("show_grid", False))
+        fig = draw_parabola_fig(st.session_state.math_data, show_labels_state, st.session_state.get("show_grid", False))
         correct_features = st.session_state.math_data[7]
         steps = st.session_state.math_data[8]
         target_eq = st.session_state.math_data[9]
     else:
         st.write("Find the linear equation $y = mx + c$ for this graph.")
-        fig = draw_line_fig(st.session_state.math_data, show_labels, st.session_state.get("show_grid", False))
+        fig = draw_line_fig(st.session_state.math_data, show_labels_state, st.session_state.get("show_grid", False))
         correct_features = st.session_state.math_data[7]
         steps = st.session_state.math_data[8]
         target_eq = st.session_state.math_data[9]
@@ -665,9 +668,9 @@ else:
                 st.session_state.feedback = "❌ Try again! Look closely at the graph."
 
         if prob_type == 'Quadratic':
-            btn_v = "y = a(x - h)² + k" if show_equations else "Vertex"
-            btn_i = "y = a(x - p)(x - q)" if show_equations else "Intercept"
-            btn_s = "y = ax² + bx + c" if show_equations else "Standard"
+            btn_v = "y = a(x - h)² + k" if show_equations_state else "Vertex"
+            btn_i = "y = a(x - p)(x - q)" if show_equations_state else "Intercept"
+            btn_s = "y = ax² + bx + c" if show_equations_state else "Standard"
             c1.button(btn_v, on_click=check_feat, args=("Vertex",), use_container_width=True)
             c2.button(btn_i, on_click=check_feat, args=("Intercept",), use_container_width=True)
             c3.button(btn_s, on_click=check_feat, args=("Standard",), use_container_width=True)
