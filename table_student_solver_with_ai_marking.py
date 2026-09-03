@@ -1,6 +1,6 @@
 import streamlit as st
 import matplotlib
-matplotlib.use('Agg') # CRITICAL: Forces Matplotlib to draw on headless servers
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import random
@@ -12,17 +12,17 @@ from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 from google import genai
 
-# --- THE MONKEY PATCH ---
-# We must patch Streamlit's missing URL function BEFORE importing the canvas component
+# --- THE BRUTE-FORCE MONKEY PATCH ---
+# Forcefully overwrite Streamlit's image URL generator to ALWAYS use Base64 strings.
+# This completely bypasses the Streamlit Cloud CORS / Media Manager blocks!
 import streamlit.elements.image as st_image
-if not hasattr(st_image, "image_to_url"):
-    def patched_image_to_url(image, *args, **kwargs):
-        buffered = io.BytesIO()
-        image.save(buffered, format="PNG")
-        img_str = base64.b64encode(buffered.getvalue()).decode()
-        return f"data:image/png;base64,{img_str}"
-    st_image.image_to_url = patched_image_to_url
-# ------------------------
+def patched_image_to_url(image, *args, **kwargs):
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+    return f"data:image/png;base64,{img_str}"
+st_image.image_to_url = patched_image_to_url
+# ------------------------------------
 
 from streamlit_drawable_canvas import st_canvas
 
@@ -105,7 +105,7 @@ def draw_table_image(x_vals, y_vals):
         y_pos -= 0.15
         
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
+    fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
     plt.close(fig)
     buf.seek(0)
     
