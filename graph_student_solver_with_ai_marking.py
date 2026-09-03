@@ -563,7 +563,9 @@ if 'ai_is_correct' not in st.session_state:
     st.session_state.ai_is_correct = False
 if 'show_camera' not in st.session_state:
     st.session_state.show_camera = False
-
+if 'pdf_bytes' not in st.session_state:
+    st.session_state.pdf_bytes = None
+    
 st.title("Student Graph Solver")
 
 # Helper function to render identical settings cog in both layout states
