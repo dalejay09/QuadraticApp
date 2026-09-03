@@ -40,7 +40,11 @@ def create_fabric_json(pil_image):
 
 # --- Core Math Engine: TABLES ---
 def generate_table_data():
-    func_type = random.choice(['Linear', 'Quadratic', 'Exponential'])
+    options = ['Linear', 'Quadratic', 'Exponential']
+    if st.session_state.get('include_shifted_exp', False):
+        options.append('Hard Exponential')
+        
+    func_type = random.choice(options)
     x_vals = np.array([0, 1, 2, 3, 4])
     
     if func_type == 'Linear':
@@ -92,6 +96,24 @@ def generate_table_data():
                  f"5. The initial value $a$ is the y-value when $x=0$, which is **{a}**.\n\n"
                  f"**${eq}$**")
 
+    elif func_type == 'Hard Exponential':
+        r = random.choice([2, 3, 4])
+        a = random.choice([1, 2, 3, -1, -2])
+        c = random.choice([i for i in range(-5, 6) if i != 0])
+        y_vals = a * (r**x_vals) + c
+        
+        c_str = f" + {c}" if c > 0 else f" - {abs(c)}"
+        eq = f"y = {a} \\cdot {r}^x{c_str}"
+        first_diff_0 = y_vals[1] - y_vals[0]
+        
+        steps = (f"**Shifted Exponential Table Steps**\n\n"
+                 f"1. Check 1st differences: They are not constant.\n"
+                 f"2. Check the multiplier between 1st differences: They multiply by **{r}** each time. (Base $r={r}$).\n"
+                 f"3. Constant multiplier of differences = Shifted Exponential ($y = a \\cdot r^x + c$).\n"
+                 f"4. The 1st difference ($x=0$ to $1$) is $a(r-1)$. So, $a = {fmt_num(first_diff_0)} \\div ({r}-1) = {fmt_num(a)}$.\n"
+                 f"5. The $y$-intercept when $x=0$ is $a + c$. So, $c = {fmt_num(y_vals[0])} - {fmt_num(a)} = {fmt_num(c)}$.\n\n"
+                 f"**${eq}$**")
+    
     return func_type, list(x_vals), list(y_vals), steps, eq
 
 # --- Dynamic Plotting Engine: TABLE IMAGE (For Web App Canvas) ---
@@ -135,7 +157,7 @@ def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
         ax.text(0.15, y_pos[i], str(fmt_num(x)), fontsize=10, ha='center', va='center')
         ax.text(0.35, y_pos[i], str(fmt_num(y)), fontsize=10, ha='center', va='center')
         
-    if show_markup:
+if show_markup:
         diff1 = [y_vals[i+1] - y_vals[i] for i in range(4)]
         
         for i in range(4):
@@ -147,22 +169,26 @@ def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
             if func_type == 'Linear':
                 lbl = f"+{fmt_num(diff1[i])}" if diff1[i] >= 0 else str(fmt_num(diff1[i]))
                 ax.text(0.65, ymid, lbl, color='#1E90FF', fontsize=10, va='center', fontweight='bold')
-            elif func_type == 'Quadratic':
+            elif func_type in ['Quadratic', 'Hard Exponential']:
                 lbl = f"+{fmt_num(diff1[i])}" if diff1[i] >= 0 else str(fmt_num(diff1[i]))
                 ax.text(0.55, ymid, lbl, color='#1E90FF', fontsize=8, va='center')
             elif func_type == 'Exponential':
                 ratio = y_vals[i+1] / y_vals[i]
                 ax.text(0.65, ymid, f"×{fmt_num(ratio)}", color='#1E90FF', fontsize=10, va='center', fontweight='bold')
 
-        if func_type == 'Quadratic':
-            diff2 = [diff1[i+1] - diff1[i] for i in range(3)]
+        if func_type in ['Quadratic', 'Hard Exponential']:
+            diff2 = [diff1[i+1] - diff1[i] for i in range(3)] if func_type == 'Quadratic' else [diff1[i+1] / diff1[i] for i in range(3)]
             for i in range(3):
                 ys = (y_pos[i] + y_pos[i+1]) / 2
                 ye = (y_pos[i+1] + y_pos[i+2]) / 2
                 ymid = (ys + ye) / 2
                 ax.annotate("", xy=(0.65, ye), xytext=(0.65, ys),
                             arrowprops=dict(arrowstyle="-", connectionstyle="arc3,rad=-0.4", color='#FF4500', lw=1.5))
-                lbl = f"+{fmt_num(diff2[i])}" if diff2[i] >= 0 else str(fmt_num(diff2[i]))
+                
+                if func_type == 'Quadratic':
+                    lbl = f"+{fmt_num(diff2[i])}" if diff2[i] >= 0 else str(fmt_num(diff2[i]))
+                else:
+                    lbl = f"×{fmt_num(diff2[i])}"
                 ax.text(0.85, ymid, lbl, color='#FF4500', fontsize=10, va='center', fontweight='bold')
 
 # --- Unified PDF Generation Engine ---
@@ -281,6 +307,7 @@ def render_settings_cog():
         st.radio("Study Mode", ["Recognise", "Solve"], key="study_mode", on_change=apply_study_mode)
         st.toggle("Mark My Working", key="mark_working")
         st.toggle("Equation Buttons", key="show_equations", on_change=handle_settings_change)
+        st.toggle("Include Shifted Exponential", key="include_shifted_exp", value=False, on_change=handle_settings_change)
         st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
 
 # PDF Controls & Settings Layout
@@ -350,10 +377,12 @@ else:
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
-    # STAGE 1: Identifying Function Family
+# STAGE 1: Identifying Function Family
     if not st.session_state.identified_correctly:
         st.write("**What family does this function belong to?**")
-        c1, c2, c3 = st.columns(3)
+        
+        include_shifted = st.session_state.get('include_shifted_exp', False)
+        cols = st.columns(4) if include_shifted else st.columns(3)
         
         def check_feat(guess):
             if guess == func_type:
@@ -365,10 +394,14 @@ else:
         btn_l = "y = mx + c" if show_equations_state else "Linear"
         btn_q = "y = ax² + bx + c" if show_equations_state else "Quadratic"
         btn_e = "y = a·rˣ" if show_equations_state else "Exponential"
+        btn_he = "y = a·rˣ + c" if show_equations_state else "Hard Exponential"
         
-        c1.button(btn_l, on_click=check_feat, args=("Linear",), use_container_width=True)
-        c2.button(btn_q, on_click=check_feat, args=("Quadratic",), use_container_width=True)
-        c3.button(btn_e, on_click=check_feat, args=("Exponential",), use_container_width=True)
+        cols[0].button(btn_l, on_click=check_feat, args=("Linear",), use_container_width=True)
+        cols[1].button(btn_q, on_click=check_feat, args=("Quadratic",), use_container_width=True)
+        cols[2].button(btn_e, on_click=check_feat, args=("Exponential",), use_container_width=True)
+        
+        if include_shifted:
+            cols[3].button(btn_he, on_click=check_feat, args=("Hard Exponential",), use_container_width=True)
 
         if st.session_state.feedback:
             if "Correct" not in st.session_state.feedback: 
