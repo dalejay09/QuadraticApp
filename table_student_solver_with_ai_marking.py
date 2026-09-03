@@ -109,10 +109,11 @@ def draw_table_image(x_vals, y_vals):
     # The right 60% of the image is left completely blank for student drawing!
     
     # Convert Matplotlib figure to PIL Image
-    fig.canvas.draw()
-    img_array = np.array(fig.canvas.renderer.buffer_rgba())
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=100)
     plt.close(fig)
-    return Image.fromarray(img_array)
+    buf.seek(0)
+    return Image.open(buf)
 
 # --- Dynamic Plotting Engine: PDF TABLE MAKER (With Markup Capabilities) ---
 def draw_pdf_table(ax, x_vals, y_vals, func_type=None, show_markup=False):
