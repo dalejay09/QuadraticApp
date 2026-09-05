@@ -1,6 +1,6 @@
-streamlit
+streamlit==1.36.0
+streamlit-drawable-canvas==0.9.3
 matplotlib
 numpy
 Pillow
 google-genai
-streamlit-drawable-canvas
