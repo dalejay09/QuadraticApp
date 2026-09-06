@@ -32,6 +32,7 @@ COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
 def generate_fraction_problem():
     max_lcm = st.session_state.get('max_lcm', 100)
     frac_count = st.session_state.get('frac_count', 3)
+    simplify_mode = st.session_state.get('simplify_answers', "No")
     
     pool = list(range(2, 11)) if max_lcm <= 100 else list(range(2, 16)) + [20, 30, 40, 50, 60, 70, 80, 90, 100]
         
@@ -51,87 +52,97 @@ def generate_fraction_problem():
 
     elif frac_count == 3:
         # --- 3 FRACTION LOGIC (+ and - only) ---
-        rand_val = random.random()
-        if rand_val < 0.4: variant = 1 
-        elif rand_val < 0.6: variant = 2 
-        elif rand_val < 0.8: variant = 3 
-        else: variant = 4 
-            
-        valid_combinations = []
-        if variant == 1:
-            for c in combinations(pool, 3):
-                L = math.lcm(math.lcm(c[0], c[1]), c[2])
-                if L <= max_lcm and L not in c: valid_combinations.append(list(c))
-        elif variant == 2:
-            for c in combinations(pool, 3):
-                L = math.lcm(math.lcm(c[0], c[1]), c[2])
-                if L <= max_lcm and L in c: valid_combinations.append(list(c))
-        elif variant == 3:
-            for L in pool:
-                if L <= max_lcm:
-                    for f in pool:
-                        if L != f and L % f == 0: valid_combinations.append([L, L, f])
-        elif variant == 4:
-            for L in pool:
-                if L <= max_lcm:
-                    for f in pool:
-                        if L != f and L % f == 0: valid_combinations.append([L, f, f])
-                            
-        if not valid_combinations:
-            valid_combinations = [[2, 3, 4]]
-            
-        chosen_denoms = random.choice(valid_combinations)
-        random.shuffle(chosen_denoms) 
-        d1, d2, d3 = chosen_denoms
-        lcm = math.lcm(math.lcm(d1, d2), d3)
-        
         while True:
-            n1 = random.randint(1, d1 - 1)
-            n2 = random.randint(1, d2 - 1)
-            n3 = random.randint(1, d3 - 1)
-            
-            op1 = random.choice(['+', '-'])
-            op2 = random.choice(['+', '-'])
-            
-            v1_num = n1 * (lcm // d1)
-            v2_num = n2 * (lcm // d2) if op1 == '+' else -n2 * (lcm // d2)
-            v3_num = n3 * (lcm // d3) if op2 == '+' else -n3 * (lcm // d3)
-            
-            target_num = v1_num + v2_num + v3_num
-            target_den = lcm
-            
-            if target_num > 0:
-                break
+            rand_val = random.random()
+            if rand_val < 0.4: variant = 1 
+            elif rand_val < 0.6: variant = 2 
+            elif rand_val < 0.8: variant = 3 
+            else: variant = 4 
                 
-        eq_str = f"{n1}/{d1} {op1} {n2}/{d2} {op2} {n3}/{d3}"
-        return n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm, target_num, target_den
+            valid_combinations = []
+            if variant == 1:
+                for c in combinations(pool, 3):
+                    L = math.lcm(math.lcm(c[0], c[1]), c[2])
+                    if L <= max_lcm and L not in c: valid_combinations.append(list(c))
+            elif variant == 2:
+                for c in combinations(pool, 3):
+                    L = math.lcm(math.lcm(c[0], c[1]), c[2])
+                    if L <= max_lcm and L in c: valid_combinations.append(list(c))
+            elif variant == 3:
+                for L in pool:
+                    if L <= max_lcm:
+                        for f in pool:
+                            if L != f and L % f == 0: valid_combinations.append([L, L, f])
+            elif variant == 4:
+                for L in pool:
+                    if L <= max_lcm:
+                        for f in pool:
+                            if L != f and L % f == 0: valid_combinations.append([L, f, f])
+                                
+            if not valid_combinations:
+                valid_combinations = [[2, 3, 4]]
+                
+            chosen_denoms = random.choice(valid_combinations)
+            random.shuffle(chosen_denoms) 
+            d1, d2, d3 = chosen_denoms
+            lcm = math.lcm(math.lcm(d1, d2), d3)
+            
+            while True:
+                n1 = random.randint(1, d1 - 1)
+                n2 = random.randint(1, d2 - 1)
+                n3 = random.randint(1, d3 - 1)
+                
+                op1 = random.choice(['+', '-'])
+                op2 = random.choice(['+', '-'])
+                
+                v1_num = n1 * (lcm // d1)
+                v2_num = n2 * (lcm // d2) if op1 == '+' else -n2 * (lcm // d2)
+                v3_num = n3 * (lcm // d3) if op2 == '+' else -n3 * (lcm // d3)
+                
+                target_num = v1_num + v2_num + v3_num
+                target_den = lcm
+                
+                if target_num > 0:
+                    break
+                    
+            # The GUARANTEED SIMPLIFICATION intercept
+            if simplify_mode == "Yes Always" and math.gcd(target_num, target_den) == 1:
+                continue 
+                
+            eq_str = f"{n1}/{d1} {op1} {n2}/{d2} {op2} {n3}/{d3}"
+            return n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm, target_num, target_den
 
     else:
         # --- 2 FRACTION LOGIC (+, -, and x) ---
         while True:
-            d1 = random.choice(pool)
-            d2 = random.choice(pool)
-            n1 = random.randint(1, d1 - 1) if d1 > 1 else 1
-            n2 = random.randint(1, d2 - 1) if d2 > 1 else 1
-            
-            op1 = random.choice(['+', '-', 'x'])
-            
-            if op1 == '+':
-                target_num = (n1 * d2) + (n2 * d1)
-                target_den = d1 * d2
-            elif op1 == '-':
-                target_num = (n1 * d2) - (n2 * d1)
-                target_den = d1 * d2
-            else:
-                target_num = n1 * n2
-                target_den = d1 * d2
+            while True:
+                d1 = random.choice(pool)
+                d2 = random.choice(pool)
+                n1 = random.randint(1, d1 - 1) if d1 > 1 else 1
+                n2 = random.randint(1, d2 - 1) if d2 > 1 else 1
                 
-            if target_num > 0:
-                break
+                op1 = random.choice(['+', '-', 'x'])
                 
-        eq_str = f"{n1}/{d1} {op1} {n2}/{d2}"
-        lcm = math.lcm(d1, d2)
-        return n1, d1, op1, n2, d2, None, None, None, eq_str, lcm, target_num, target_den
+                if op1 == '+':
+                    target_num = (n1 * d2) + (n2 * d1)
+                    target_den = d1 * d2
+                elif op1 == '-':
+                    target_num = (n1 * d2) - (n2 * d1)
+                    target_den = d1 * d2
+                else:
+                    target_num = n1 * n2
+                    target_den = d1 * d2
+                    
+                if target_num > 0:
+                    break
+                    
+            # The GUARANTEED SIMPLIFICATION intercept
+            if simplify_mode == "Yes Always" and math.gcd(target_num, target_den) == 1:
+                continue
+
+            eq_str = f"{n1}/{d1} {op1} {n2}/{d2}"
+            lcm = math.lcm(d1, d2)
+            return n1, d1, op1, n2, d2, None, None, None, eq_str, lcm, target_num, target_den
 
 # --- Visual Engine: BACKEND MATPLOTLIB ---
 def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
@@ -237,7 +248,7 @@ def format_fraction_input():
 
 # --- Synchronous Phase Transition Engine ---
 def process_correct_answer(user_num, user_den):
-    if st.session_state.simplify_answers == "Yes":
+    if st.session_state.simplify_answers in ["Yes", "Yes Always"]:
         if math.gcd(user_num, user_den) == 1:
             st.session_state.is_correct = True
             st.session_state.local_checked = True
@@ -288,7 +299,7 @@ with col2:
         st.radio("Fractions per problem", [1, 2, 3], key="frac_count", on_change=handle_frac_count_change)
         
         disabled_simp = (st.session_state.frac_count == 1)
-        st.radio("Simplify Answers", ["Yes", "No"], key="simplify_answers", on_change=handle_settings_change, disabled=disabled_simp)
+        st.radio("Simplify Answers", ["Yes", "Yes Always", "No"], key="simplify_answers", on_change=handle_settings_change, disabled=disabled_simp)
         st.radio("Max LCM Limit", [50, 100, 200], key="max_lcm", on_change=handle_settings_change)
 
 current_color_hex = PEN_COLORS[st.session_state.color_index]
@@ -453,7 +464,7 @@ else:
                 else:
                     if user_num * target_den == target_num * user_den:
                         # Simplification phase fallback routing
-                        if st.session_state.current_frac_count == 1 and st.session_state.simplify_answers == "Yes" and math.gcd(user_num, user_den) > 1:
+                        if st.session_state.current_frac_count == 1 and st.session_state.simplify_answers in ["Yes", "Yes Always"] and math.gcd(user_num, user_den) > 1:
                             trigger_ai = True
                         else:
                             needs_rerun = process_correct_answer(user_num, user_den)
