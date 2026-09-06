@@ -160,7 +160,6 @@ if st.session_state.generating:
         st.session_state.ai_feedback = ""
         st.session_state.color_index = 0 
         
-        # Completely wipe the memory vault for a new problem
         st.session_state.stroke_history = [[]]
         st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
         st.session_state.canvas_key += 1 
@@ -192,46 +191,54 @@ else:
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
-    # --- THE MEMORY STACK & ERASER ENGINE ---
+    # --- THE BOUNDING BOX COLLISION ENGINE ---
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
     last_saved_objects = st.session_state.stroke_history[-1]
 
-    # Only process if the browser successfully drew a brand NEW stroke
     if len(current_objects) > len(last_saved_objects):
         new_stroke = current_objects[-1]
         
         if new_stroke.get("stroke", "").upper() == "#FFFFFE":
-            # Eraser Hit! Calculate the center point of the invisible smudge
             e_obj = new_stroke
-            ex = e_obj.get("left", 0) + (e_obj.get("width", 0) * e_obj.get("scaleX", 1)) / 2
-            ey = e_obj.get("top", 0) + (e_obj.get("height", 0) * e_obj.get("scaleY", 1)) / 2
             
-            objects_to_keep = last_saved_objects.copy()
-            if objects_to_keep:
-                min_dist = float('inf')
-                closest_idx = -1
-                
-                # Collision Engine: Find the stroke mathematically closest to the smudge
-                for i, obj in enumerate(objects_to_keep):
-                    ox = obj.get("left", 0) + (obj.get("width", 0) * obj.get("scaleX", 1)) / 2
-                    oy = obj.get("top", 0) + (obj.get("height", 0) * obj.get("scaleY", 1)) / 2
-                    dist = math.hypot(ex - ox, ey - oy)
-                    
-                    if dist < min_dist:
-                        min_dist = dist
-                        closest_idx = i
-                
-                if closest_idx != -1:
-                    objects_to_keep.pop(closest_idx)
+            # 1. Define the Eraser's Hitbox (with a 15-pixel fat padding)
+            ew = e_obj.get("width", 0) * e_obj.get("scaleX", 1)
+            eh = e_obj.get("height", 0) * e_obj.get("scaleY", 1)
+            e_left = e_obj.get("left", 0)
+            e_top = e_obj.get("top", 0)
             
-            # Save the post-deletion state to history and force a visual redraw
+            pad = 15
+            E_L = e_left - pad
+            E_R = e_left + ew + pad
+            E_T = e_top - pad
+            E_B = e_top + eh + pad
+            
+            objects_to_keep = []
+            
+            # 2. Scan every saved stroke to see if its bounding box intersects the Eraser Hitbox
+            for obj in last_saved_objects:
+                ow = obj.get("width", 0) * obj.get("scaleX", 1)
+                oh = obj.get("height", 0) * obj.get("scaleY", 1)
+                o_left = obj.get("left", 0)
+                o_top = obj.get("top", 0)
+                
+                T_L = o_left
+                T_R = o_left + ow
+                T_T = o_top
+                T_B = o_top + oh
+                
+                # Bounding Box Intersection Logic
+                overlap = not (E_R < T_L or E_L > T_R or E_B < T_T or E_T > T_B)
+                
+                if not overlap:
+                    objects_to_keep.append(obj)
+            
             st.session_state.stroke_history.append(objects_to_keep)
             st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": objects_to_keep}
             st.session_state.canvas_key += 1
             st.rerun()
             
         else:
-            # Normal Pen! Silently save the snapshot to memory without forcing a flash
             st.session_state.stroke_history.append(current_objects.copy())
 
     # --- CANVAS CONTROLS ---
@@ -239,7 +246,6 @@ else:
     with col_undo:
         if st.button("↩️ Undo Last", use_container_width=True):
             if len(st.session_state.stroke_history) > 1:
-                # Throw away the latest state and revert to the previous snapshot
                 st.session_state.stroke_history.pop()
                 last_valid = st.session_state.stroke_history[-1]
                 st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
