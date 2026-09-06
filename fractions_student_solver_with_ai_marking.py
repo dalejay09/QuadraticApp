@@ -125,6 +125,21 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return Image.open(buf).convert('RGBA').copy()
 
+# --- Custom CSS for Compact UI ---
+st.markdown("""
+    <style>
+    input[type="text"] {
+        text-align: center;
+        font-size: 1.2rem !important;
+        font-weight: bold;
+    }
+    div.row-widget.stRadio > div {
+        flex-direction: row;
+        gap: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- Memory Stack Initialization ---
 if 'generating' not in st.session_state:
     st.session_state.generating = True
@@ -271,7 +286,6 @@ else:
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
         if user_answer:
-            # Parse the input using regex to split by the slash (handles spaces perfectly)
             match = re.match(r'^\s*(-?\d+)\s*/\s*(-?\d+)\s*$', user_answer)
             if match:
                 user_num = int(match.group(1))
@@ -295,7 +309,7 @@ else:
         else:
             st.error("Please type your final answer!")
 
-    # --- AI DIAGNOSTICS ---
+    # --- AI DIAGNOSTICS (With Override Logic) ---
     if st.session_state.local_checked:
         if st.session_state.is_correct:
             st.success(st.session_state.ai_feedback)
@@ -304,7 +318,7 @@ else:
             
             if st.button("🤖 Ask AI Tutor to check my working", use_container_width=True):
                 if canvas_result.image_data is not None:
-                    with st.spinner("The AI Tutor is reviewing your scribbles..."):
+                    with st.spinner("The AI Tutor is reviewing your workings..."):
                         try:
                             ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
                             bg = st.session_state.bg_image.convert("RGBA")
@@ -317,18 +331,17 @@ else:
                             prompt = f"""
                             You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
                             The problem is: {eq_str}. 
+                            The mathematically correct final answer is equivalent to {target_num}/{lcm}.
                             
-                            The student typed their final answer as {st.session_state.user_typed_num}/{st.session_state.user_typed_den}. This is INCORRECT.
+                            The student typed their final answer as {st.session_state.user_typed_num}/{st.session_state.user_typed_den}, which is INCORRECT.
                             
                             I am sending you an image of their digital workspace. 
-                            The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions. They may have also scribbled their final answer on the right side of the canvas over the horizontal line.
+                            The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions. They may have also handwritten their final answer on the right side of the canvas over the horizontal line.
                             
                             IMPORTANT GRADING RULES:
-                            1. Read their handwritten ink to figure out WHERE they went wrong before they typed {st.session_state.user_typed_num}/{st.session_state.user_typed_den}. 
-                            2. Did they convert the denominators incorrectly? Did they mess up the addition/subtraction on top?
-                            3. The LATEST attempt is written in {current_color_name} ink. Treat other colors as older mistakes.
-                            
-                            Reply EXACTLY with the word "INCORRECT:" on the first line. Gently explain where their handwritten logic went wrong to help them fix their typed answer. Keep your tone highly supportive.
+                            1. The student may have tried this problem multiple times. Their LATEST attempt is written in {current_color_name} ink. Treat other colors as older mistakes.
+                            2. OVERRIDE RULE: Look closely at their LATEST {current_color_name} handwritten final answer on the far right. If their {current_color_name} handwritten final answer is mathematically CORRECT (equivalent to {target_num}/{lcm}), ignore their typed answer! They just forgot to update the box. Reply EXACTLY with the word "CORRECT:" on the first line, followed by praise for fixing their workings.
+                            3. If their handwritten answer is still incorrect or missing, figure out WHERE they went wrong in their {current_color_name} workings. Reply EXACTLY with the word "INCORRECT:" on the first line, and gently explain their mistake to help them. Keep your tone highly supportive.
                             """
                             
                             response = client.models.generate_content(
@@ -337,8 +350,15 @@ else:
                             )
                             
                             resp_text = response.text.strip()
-                            st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text)
-                            st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
+                            
+                            # Catch the override!
+                            if resp_text.upper().startswith("CORRECT"):
+                                st.session_state.is_correct = True
+                                st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
+                            else:
+                                st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text)
+                                st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
+                                
                             st.rerun()
                             
                         except Exception as e:
