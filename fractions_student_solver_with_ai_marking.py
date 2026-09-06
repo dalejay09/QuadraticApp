@@ -175,7 +175,6 @@ def format_fraction_input():
     if raw_input:
         match = re.match(r'^\s*(-?\d+)\s*[^\d]+\s*(-?\d+)\s*$', raw_input)
         if match:
-            # Overwrite their string with a perfectly formatted fraction
             st.session_state.user_frac_input = f"{match.group(1)}/{match.group(2)}"
 
 col1, col2 = st.columns([5, 1])
@@ -197,7 +196,7 @@ if st.session_state.generating:
         st.session_state.color_index = 0 
         st.session_state.local_checked = False
         st.session_state.is_correct = False
-        st.session_state.user_frac_input = "" # Wipe the input box for new problems
+        st.session_state.user_frac_input = "" 
         
         st.session_state.stroke_history = [[]]
         st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
@@ -227,7 +226,6 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
-        display_toolbar=False, 
         initial_drawing=st.session_state.active_initial_drawing, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
@@ -295,7 +293,6 @@ else:
     st.write("---")
     
     # --- HYBRID NATIVE INPUT ---
-    # The on_change callback triggers the moment they click Check (or tap outside the box)
     st.text_input("Type your final answer:", placeholder="e.g. 35.70 or 35/70", key="user_frac_input", on_change=format_fraction_input)
     user_answer = st.session_state.user_frac_input
     
