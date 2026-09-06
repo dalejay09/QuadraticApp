@@ -207,6 +207,8 @@ if 'user_typed_num' not in st.session_state: st.session_state.user_typed_num = 0
 if 'user_typed_den' not in st.session_state: st.session_state.user_typed_den = 1
 if 'user_frac_input' not in st.session_state: st.session_state.user_frac_input = ""
 if 'pending_frac_update' not in st.session_state: st.session_state.pending_frac_update = None
+if 'last_submitted_text' not in st.session_state: st.session_state.last_submitted_text = None
+if 'last_canvas_state' not in st.session_state: st.session_state.last_canvas_state = []
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -252,11 +254,14 @@ def process_correct_answer(user_num, user_den):
                 st.session_state.local_checked = False  
                 st.session_state.is_correct = False
                 
-                # SAFELY clear the text box via the pending router to avoid crash
                 st.session_state.pending_frac_update = "" 
-                
                 st.session_state.stroke_history = [[]]
                 st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
+                
+                # Reset smart routing comparators
+                st.session_state.last_submitted_text = None
+                st.session_state.last_canvas_state = []
+                
                 st.session_state.canvas_key += 1
                 return True
     else:
@@ -294,8 +299,12 @@ if st.session_state.generating:
         
         st.session_state.stroke_history = [[]]
         st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
-        st.session_state.canvas_key += 1 
         
+        # Reset smart routing comparators
+        st.session_state.last_submitted_text = None
+        st.session_state.last_canvas_state = []
+        
+        st.session_state.canvas_key += 1 
         st.session_state.generating = False
         st.rerun()
 
@@ -336,6 +345,11 @@ else:
             st.session_state.stroke_history = [[]]
             st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
             st.session_state.color_index = 0
+            
+            # Reset smart routing comparators
+            st.session_state.last_submitted_text = None
+            st.session_state.last_canvas_state = []
+            
             st.session_state.canvas_key += 1
             st.rerun()
 
@@ -406,7 +420,17 @@ else:
     trigger_ai = False
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        if user_answer:
+        
+        # Check if digital ink has been added/removed since the last submit check
+        canvas_changed = (current_objects != st.session_state.last_canvas_state)
+        
+        if not user_answer:
+            # Box is blank
+            trigger_ai = True
+        elif user_answer == st.session_state.last_submitted_text and canvas_changed:
+            # Box unchanged but new ink detected! AI intercepts automatically.
+            trigger_ai = True
+        else:
             match = re.match(r'^\s*(-?\d+)\s*[^\d]+\s*(-?\d+)\s*$', user_answer)
             if match:
                 user_num = int(match.group(1))
@@ -416,9 +440,7 @@ else:
                     st.error("Denominator cannot be zero!")
                 else:
                     if user_num * target_den == target_num * user_den:
-                        # --- SMART AI ROUTING ---
-                        # If they are in the simplification phase, and submit a correct but unsimplified answer,
-                        # assume they simplified directly on the canvas and send it to the AI for grading.
+                        # Simplification phase fallback routing
                         if st.session_state.current_frac_count == 1 and st.session_state.simplify_answers == "Yes" and math.gcd(user_num, user_den) > 1:
                             trigger_ai = True
                         else:
@@ -431,9 +453,10 @@ else:
                         st.session_state.ai_feedback = ""
             else:
                 st.error("Please type two numbers separated by a symbol (like 35.70 or 35/70).")
-        else:
-            # Box is blank: Send straight to AI Marker
-            trigger_ai = True
+                
+        # Save state for the next submit cycle
+        st.session_state.last_submitted_text = user_answer
+        st.session_state.last_canvas_state = current_objects.copy()
 
     # --- AI DIAGNOSTICS UI (Local Check Warnings) ---
     if st.session_state.local_checked and not trigger_ai:
@@ -525,7 +548,6 @@ else:
                         st.session_state.ai_feedback = resp_text
                         st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                         
-                    # Unconditional rerun ensures the UI updates to reflect the AI's state changes
                     st.rerun()
                     
                 except Exception as e:
