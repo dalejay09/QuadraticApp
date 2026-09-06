@@ -86,7 +86,7 @@ def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return {"version": "4.4.0", "objects": objects}
 
-# --- THE BRUTE-FORCE BOUNDING BOX INTERPOLATOR ---
+# --- THE FLAWLESS FABRIC.JS RENDERER ---
 def render_strokes_on_image(bg_image, json_data):
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
@@ -95,65 +95,45 @@ def render_strokes_on_image(bg_image, json_data):
         return img.convert("RGB")
         
     for obj in json_data["objects"]:
+        # Only process the blue ink paths the user draws
         if obj.get("type") == "path" and "path" in obj:
             stroke_color = obj.get("stroke", "#1E90FF")
             stroke_width = float(obj.get("strokeWidth", 3))
             
-            # 1. Grab the exact visual boundaries of the stroke on the 350x200 canvas
             left = float(obj.get("left", 0))
             top = float(obj.get("top", 0))
             width = float(obj.get("width", 0))
             height = float(obj.get("height", 0))
             scaleX = float(obj.get("scaleX", 1))
             scaleY = float(obj.get("scaleY", 1))
+            path_offset_x = float(obj.get("pathOffset", {}).get("x", 0))
+            path_offset_y = float(obj.get("pathOffset", {}).get("y", 0))
             
-            box_w = width * scaleX
-            box_h = height * scaleY
+            # Precisely calculate the absolute visual center of the drawn stroke
+            cx = left + (width / 2) * scaleX if obj.get("originX") != "center" else left
+            cy = top + (height / 2) * scaleY if obj.get("originY") != "center" else top
             
-            box_left = left - box_w / 2 if obj.get("originX") == "center" else left
-            box_top = top - box_h / 2 if obj.get("originY") == "center" else top
-            
-            # 2. Extract every single raw point, ignoring all commands and offsets
-            raw_points = []
+            points = []
             for cmd in obj["path"]:
                 nums = []
-                for v in cmd:
-                    if isinstance(v, (int, float)):
-                        nums.append(float(v))
-                    elif isinstance(v, str):
-                        try:
-                            nums.append(float(v))
-                        except ValueError:
-                            pass
+                for val in cmd:
+                    try:
+                        nums.append(float(val))
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Apply the perfect absolute translation matrix to every control point
                 for i in range(0, len(nums)-1, 2):
-                    raw_points.append((nums[i], nums[i+1]))
+                    px = cx + (nums[i] - path_offset_x) * scaleX
+                    py = cy + (nums[i+1] - path_offset_y) * scaleY
+                    points.append((px, py))
                     
-            if not raw_points:
-                continue
-                
-            # 3. Find the internal geometry limits of the raw points
-            min_x = min(p[0] for p in raw_points)
-            max_x = max(p[0] for p in raw_points)
-            min_y = min(p[1] for p in raw_points)
-            max_y = max(p[1] for p in raw_points)
-            
-            range_x = max_x - min_x if max_x > min_x else 1
-            range_y = max_y - min_y if max_y > min_y else 1
-            
-            # 4. Forcibly map the raw points into the exact visual canvas box
-            mapped_points = []
-            for px, py in raw_points:
-                mx = box_left + ((px - min_x) / range_x) * box_w
-                my = box_top + ((py - min_y) / range_y) * box_h
-                mapped_points.append((mx, my))
-                
-            # 5. Draw it perfectly in place
-            if len(mapped_points) == 1:
+            if len(points) == 1:
                 r = (stroke_width * scaleX) / 2
-                px, py = mapped_points[0]
+                px, py = points[0]
                 draw.ellipse([px-r, py-r, px+r, py+r], fill=stroke_color)
-            elif len(mapped_points) > 1:
-                draw.line(mapped_points, fill=stroke_color, width=int(max(1, stroke_width * scaleX)), joint="curve")
+            elif len(points) > 1:
+                draw.line(points, fill=stroke_color, width=int(max(1, stroke_width * scaleX)), joint="curve")
                 
     return img.convert("RGB")
 
@@ -164,6 +144,8 @@ if 'ai_feedback' not in st.session_state:
     st.session_state.ai_feedback = ""
 if 'canvas_key' not in st.session_state:
     st.session_state.canvas_key = 0 
+if 'last_ink' not in st.session_state:
+    st.session_state.last_ink = None # THE VAULT
 
 st.title("Fraction Master!")
 st.write("Write right over the text to cross out denominators, then put your answer at the end!")
@@ -175,6 +157,7 @@ if st.session_state.generating:
         st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.fabric_state = generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
+        st.session_state.last_ink = None # Clear the vault for the new problem
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
         st.rerun()
@@ -195,54 +178,67 @@ else:
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
+    # --- THE MEMORY VAULT CAPTURE ---
+    # Constantly watch the canvas and silently backup the ink before the button is ever clicked
+    if canvas_result.json_data and "objects" in canvas_result.json_data:
+        has_ink = any(obj.get("type") == "path" for obj in canvas_result.json_data["objects"])
+        if has_ink:
+            st.session_state.last_ink = canvas_result.json_data
+
     if st.button("Check My Answer!", type="primary", use_container_width=True):
         
-        with st.spinner("The AI Tutor is checking your work..."):
-            try:
-                json_data = canvas_result.json_data if canvas_result else None
-                final_canvas = render_strokes_on_image(st.session_state.bg_image, json_data)
-                
-                st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
-                
-                client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                prompt = f"""
-                You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
-                The problem they are solving is: {eq_str}. 
-                The Lowest Common Multiple for the denominators is {lcm}.
-                
-                I am sending you a single image of their digital workspace. 
-                The black printed fractions are the original problem. The BLUE ink is their handwriting.
-                The student is writing in blue ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
-                Their final answer is written in blue ink on the far right, over the black horizontal line.
-                
-                IMPORTANT GRADING RULES:
-                1. First, silently calculate the correct final numerator and denominator yourself.
-                2. Read their blue ink to see if they converted the original fractions correctly.
-                3. SPECIAL RULE: If a fraction already has the lowest common denominator, the student may leave it completely unmarked. This is correct logic! Do not tell them they missed a step or forgot to mark it.
-                4. Check their final answer on the right. It does not need to be simplified.
-                
-                If their final math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
-                If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong without giving them the final answer. Keep your tone highly supportive.
-                """
-                
-                response = client.models.generate_content(
-                    model='gemini-3.6-flash',
-                    contents=[prompt, final_canvas]
-                )
-                
-                resp_text = response.text.strip()
-                if resp_text.upper().startswith("CORRECT"):
-                    st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
-                else:
-                    st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
-                
-                st.rerun()
-            except Exception as e:
-                st.error(f"Oops! The tutor had a glitch: {e}")
+        # Read from the vault to bypass the Streamlit mobile refresh glitch entirely!
+        json_to_render = st.session_state.last_ink 
+        
+        if json_to_render:
+            with st.spinner("The AI Tutor is checking your work..."):
+                try:
+                    final_canvas = render_strokes_on_image(st.session_state.bg_image, json_to_render)
+                    
+                    st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
+                    
+                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                    prompt = f"""
+                    You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
+                    The problem they are solving is: {eq_str}. 
+                    The Lowest Common Multiple for the denominators is {lcm}.
+                    
+                    I am sending you a single image of their digital workspace. 
+                    The black printed fractions are the original problem. The BLUE ink is their handwriting.
+                    The student is writing in blue ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
+                    Their final answer is written in blue ink on the far right, over the black horizontal line.
+                    
+                    IMPORTANT GRADING RULES:
+                    1. First, silently calculate the correct final numerator and denominator yourself.
+                    2. Read their blue ink to see if they converted the original fractions correctly.
+                    3. SPECIAL RULE: If a fraction already has the lowest common denominator, the student may leave it completely unmarked. This is correct logic! Do not tell them they missed a step or forgot to mark it.
+                    4. Check their final answer on the right. It does not need to be simplified.
+                    
+                    If their final math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
+                    If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong without giving them the final answer. Keep your tone highly supportive.
+                    """
+                    
+                    response = client.models.generate_content(
+                        model='gemini-3.6-flash',
+                        contents=[prompt, final_canvas]
+                    )
+                    
+                    resp_text = response.text.strip()
+                    if resp_text.upper().startswith("CORRECT"):
+                        st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
+                    else:
+                        st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
+                    
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Oops! The tutor had a glitch: {e}")
+        else:
+            st.error("Please draw your working on the canvas before checking your answer!")
 
     if st.session_state.ai_feedback:
         st.info(st.session_state.ai_feedback)
 
     if st.button("Give me a new problem!", use_container_width=True):
         st.session_state.generating = True
+        st.session_state.last_ink = None
         st.rerun()
