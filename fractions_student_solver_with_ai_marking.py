@@ -95,8 +95,6 @@ def generate_fraction_problem():
             break
             
     eq_str = f"{n1}/{d1} {op1} {n2}/{d2} {op2} {n3}/{d3}"
-    
-    # Calculate exact unsimplified target numerator
     target_num = int(v1 * lcm + v2 * lcm + v3 * lcm)
     
     return n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm, target_num
@@ -111,12 +109,15 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     
     fontsize = 28
     
-    ax.text(0.15, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.30, 0.5, op1, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.45, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.60, 0.5, op2, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.75, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.90, 0.5, "=", fontsize=fontsize, ha='center', va='center')
+    ax.text(0.10, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
+    ax.text(0.23, 0.5, op1, fontsize=fontsize, ha='center', va='center')
+    ax.text(0.36, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
+    ax.text(0.49, 0.5, op2, fontsize=fontsize, ha='center', va='center')
+    ax.text(0.62, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
+    ax.text(0.75, 0.5, "=", fontsize=fontsize, ha='center', va='center')
+    
+    # Restored the blank answer line so students can still scribble their answer!
+    ax.plot([0.814, 0.942], [0.5, 0.5], color='black', lw=2)
     
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
@@ -124,6 +125,29 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     buf.seek(0)
     
     return Image.open(buf).convert('RGBA').copy()
+
+# --- Custom CSS for Compact UI ---
+st.markdown("""
+    <style>
+    /* Strip the up/down arrows from number inputs */
+    input[type="number"]::-webkit-inner-spin-button, 
+    input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    input[type="number"] {
+        -moz-appearance: textfield;
+        text-align: center;
+        font-size: 1.2rem !important;
+        font-weight: bold;
+    }
+    /* Squish the padding on the tool radio buttons */
+    div.row-widget.stRadio > div {
+        flex-direction: row;
+        gap: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- Memory Stack Initialization ---
 if 'generating' not in st.session_state:
@@ -179,11 +203,12 @@ else:
     eq_str, lcm, target_num = st.session_state.math_data
     
     st.write(f"Cross out the denominators! Current pen: **{current_color_name}**")
-    
-    tool = st.radio("Tool Selection", ["🖌️ Pen", "🧽 Tap-Eraser"], horizontal=True, label_visibility="collapsed")
-    
-    active_stroke_color = current_color_hex if tool == "🖌️ Pen" else "#FFFFFE"
-    active_stroke_width = 3 if tool == "🖌️ Pen" else 15
+
+    # --- THE DIGITAL CANVAS ---
+    # We must retrieve tool state from session_state immediately to dictate canvas config
+    active_tool = st.session_state.get("tool_selector", "🖌️ Pen")
+    active_stroke_color = current_color_hex if active_tool == "🖌️ Pen" else "#FFFFFE"
+    active_stroke_width = 3 if active_tool == "🖌️ Pen" else 15
 
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
@@ -198,6 +223,26 @@ else:
         initial_drawing=st.session_state.active_initial_drawing, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
+
+    # --- COMPACT TOOLBAR ROW ---
+    col_t, col_u, col_c = st.columns([2.5, 1.2, 1.2])
+    with col_t:
+        st.radio("Tool", ["🖌️ Pen", "🧽 Eraser"], horizontal=True, label_visibility="collapsed", key="tool_selector")
+    with col_u:
+        if st.button("↩️ Undo", use_container_width=True):
+            if len(st.session_state.stroke_history) > 1:
+                st.session_state.stroke_history.pop()
+                last_valid = st.session_state.stroke_history[-1]
+                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
+                st.session_state.canvas_key += 1
+                st.rerun()
+    with col_c:
+        if st.button("🗑️ Clear", use_container_width=True):
+            st.session_state.stroke_history = [[]]
+            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
+            st.session_state.color_index = 0
+            st.session_state.canvas_key += 1
+            st.rerun()
 
     # --- THE BOUNDING BOX COLLISION ENGINE ---
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
@@ -244,47 +289,34 @@ else:
         else:
             st.session_state.stroke_history.append(current_objects.copy())
 
-    # --- CANVAS CONTROLS ---
-    col_undo, col_clear = st.columns(2)
-    with col_undo:
-        if st.button("↩️ Undo Last", use_container_width=True):
-            if len(st.session_state.stroke_history) > 1:
-                st.session_state.stroke_history.pop()
-                last_valid = st.session_state.stroke_history[-1]
-                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
-                st.session_state.canvas_key += 1
-                st.rerun()
-    with col_clear:
-        if st.button("🗑️ Clear All", use_container_width=True):
-            st.session_state.stroke_history = [[]]
-            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
-            st.session_state.color_index = 0
-            st.session_state.canvas_key += 1
-            st.rerun()
 
     st.write("---")
-    st.write("**Final Answer:**")
     
-    # --- HYBRID NATIVE INPUT ---
-    col_num, col_div, col_den = st.columns([2, 1, 2])
-    user_num = col_num.number_input("Numerator", step=1, value=None, label_visibility="collapsed", placeholder="Top")
-    col_div.markdown("<h3 style='text-align:center; margin-top:5px;'>/</h3>", unsafe_allow_html=True)
-    user_den = col_den.number_input("Denominator", step=1, value=None, label_visibility="collapsed", placeholder="Bottom")
-
-    if st.button("Check My Answer!", type="primary", use_container_width=True):
-        if user_num is not None and user_den is not None and user_den != 0:
-            st.session_state.local_checked = True
-            
-            # Cross-multiplication checks for mathematically equivalent fractions (handles unsimplified answers perfectly)
-            if user_num * lcm == target_num * user_den:
-                st.session_state.is_correct = True
-                st.session_state.ai_feedback = "🌟 **Awesome job!** Your math is absolutely perfect!"
+    # --- COMPACT INLINE INPUT ROW ---
+    col_lbl, col_n, col_slash, col_d, col_btn = st.columns([1.5, 2, 0.5, 2, 3])
+    with col_lbl:
+        st.markdown("<div style='margin-top:7px; font-weight:bold;'>Answer:</div>", unsafe_allow_html=True)
+    with col_n:
+        user_num = st.number_input("Num", step=1, value=None, label_visibility="collapsed", placeholder="___")
+    with col_slash:
+        st.markdown("<h3 style='text-align:center; margin:0; padding-top:2px;'>/</h3>", unsafe_allow_html=True)
+    with col_d:
+        user_den = st.number_input("Den", step=1, value=None, label_visibility="collapsed", placeholder="___")
+    with col_btn:
+        if st.button("Check!", type="primary", use_container_width=True):
+            if user_num is not None and user_den is not None and user_den != 0:
+                st.session_state.local_checked = True
+                
+                if user_num * lcm == target_num * user_den:
+                    st.session_state.is_correct = True
+                    st.session_state.ai_feedback = "🌟 **Awesome job!** Your math is absolutely perfect!"
+                else:
+                    st.session_state.is_correct = False
+                    st.session_state.ai_feedback = ""
             else:
-                st.session_state.is_correct = False
-                st.session_state.ai_feedback = ""
-        else:
-            st.error("Please type your final numerator and denominator!")
+                st.error("Please type your final numerator and denominator!")
 
+    # --- AI DIAGNOSTICS ---
     if st.session_state.local_checked:
         if st.session_state.is_correct:
             st.success(st.session_state.ai_feedback)
@@ -310,7 +342,7 @@ else:
                             The student typed their final answer as {user_num}/{user_den}. This is INCORRECT.
                             
                             I am sending you an image of their digital workspace. 
-                            The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
+                            The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions. They may have also scribbled their final answer on the right side of the canvas over the horizontal line.
                             
                             IMPORTANT GRADING RULES:
                             1. Read their handwritten ink to figure out WHERE they went wrong before they typed {user_num}/{user_den}. 
@@ -338,6 +370,7 @@ else:
     if st.session_state.ai_feedback and not st.session_state.is_correct:
         st.info(f"**Tutor says:** {st.session_state.ai_feedback}")
 
+    st.write("")
     if st.button("Give me a new problem!", use_container_width=True):
         st.session_state.generating = True
         st.rerun()
