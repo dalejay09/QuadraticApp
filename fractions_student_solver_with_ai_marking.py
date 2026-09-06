@@ -8,10 +8,10 @@ import io
 import re
 import base64
 from PIL import Image
+from itertools import combinations
 from google import genai
 
 # --- THE ULTIMATE MONKEY PATCH ---
-# Bypasses Streamlit's buggy media manager for background images
 import streamlit_drawable_canvas
 def b64_image_to_url(image, *args, **kwargs):
     buffered = io.BytesIO()
@@ -25,27 +25,74 @@ from streamlit_drawable_canvas import st_canvas
 
 # --- Math Engine: FRACTIONS ---
 def generate_fraction_problem():
-    while True:
-        denoms = random.sample(range(2, 11), 3)
-        lcm = math.lcm(math.lcm(denoms[0], denoms[1]), denoms[2])
+    max_lcm = st.session_state.get('max_lcm', 100)
+    
+    if max_lcm <= 100:
+        pool = list(range(2, 11))
+    else:
+        pool = list(range(2, 16)) + [20, 30, 40, 50, 60, 70, 80, 90, 100]
         
-        if lcm <= 100:
-            n1 = random.randint(1, denoms[0] - 1)
-            n2 = random.randint(1, denoms[1] - 1)
-            n3 = random.randint(1, denoms[2] - 1)
+    rand_val = random.random()
+    if rand_val < 0.4:
+        variant = 1 # 40%: 3 unique denominators -> 4th LCM
+    elif rand_val < 0.6:
+        variant = 2 # 20%: 3 unique denominators -> One IS the LCM
+    elif rand_val < 0.8:
+        variant = 3 # 20%: 2 match the LCM, 1 is a factor
+    else:
+        variant = 4 # 20%: 1 is the LCM, 2 are matching factors
+        
+    valid_combinations = []
+    
+    if variant == 1:
+        for c in combinations(pool, 3):
+            L = math.lcm(math.lcm(c[0], c[1]), c[2])
+            if L <= max_lcm and L not in c:
+                valid_combinations.append(list(c))
+    elif variant == 2:
+        for c in combinations(pool, 3):
+            L = math.lcm(math.lcm(c[0], c[1]), c[2])
+            if L <= max_lcm and L in c:
+                valid_combinations.append(list(c))
+    elif variant == 3:
+        for L in pool:
+            if L <= max_lcm:
+                for f in pool:
+                    if L != f and L % f == 0:
+                        valid_combinations.append([L, L, f])
+    elif variant == 4:
+        for L in pool:
+            if L <= max_lcm:
+                for f in pool:
+                    if L != f and L % f == 0:
+                        valid_combinations.append([L, f, f])
+                        
+    # Fallback failsafe
+    if not valid_combinations:
+        valid_combinations = [[2, 3, 4]]
+        
+    chosen_denoms = random.choice(valid_combinations)
+    random.shuffle(chosen_denoms) 
+    d1, d2, d3 = chosen_denoms
+    lcm = math.lcm(math.lcm(d1, d2), d3)
+    
+    while True:
+        n1 = random.randint(1, d1 - 1)
+        n2 = random.randint(1, d2 - 1)
+        n3 = random.randint(1, d3 - 1)
+        
+        op1 = random.choice(['+', '-'])
+        op2 = random.choice(['+', '-'])
+        
+        v1 = n1 / d1
+        v2 = n2 / d2 if op1 == '+' else -n2 / d2
+        v3 = n3 / d3 if op2 == '+' else -n3 / d3
+        
+        if v1 + v2 + v3 > 0:
+            break
             
-            op1 = random.choice(['+', '-'])
-            op2 = random.choice(['+', '-'])
-            
-            v1 = n1 / denoms[0]
-            v2 = n2 / denoms[1] if op1 == '+' else -n2 / denoms[1]
-            v3 = n3 / denoms[2] if op2 == '+' else -n3 / denoms[2]
-            
-            if v1 + v2 + v3 > 0:
-                break
-                
-    eq_str = f"{n1}/{denoms[0]} {op1} {n2}/{denoms[1]} {op2} {n3}/{denoms[2]}"
-    return n1, denoms[0], op1, n2, denoms[1], op2, n3, denoms[2], eq_str, lcm
+    eq_str = f"{n1}/{d1} {op1} {n2}/{d2} {op2} {n3}/{d3}"
+    return n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm
 
 # --- Visual Engine: BACKEND MATPLOTLIB ---
 def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
@@ -80,8 +127,19 @@ if 'ai_feedback' not in st.session_state:
     st.session_state.ai_feedback = ""
 if 'canvas_key' not in st.session_state:
     st.session_state.canvas_key = 0 
+if 'max_lcm' not in st.session_state:
+    st.session_state.max_lcm = 100
 
-st.title("Fraction Master!")
+def handle_settings_change():
+    st.session_state.generating = True
+
+col1, col2 = st.columns([5, 1])
+with col1:
+    st.title("Fraction Master!")
+with col2:
+    with st.popover("⚙️", use_container_width=True):
+        st.radio("Max LCM Limit", [50, 100, 200], key="max_lcm", on_change=handle_settings_change)
+
 st.write("Write right over the text to cross out denominators, then put your answer at the end!")
 
 if st.session_state.generating:
@@ -97,8 +155,6 @@ if st.session_state.generating:
 else:
     eq_str, lcm = st.session_state.math_data
     
-    # --- The Digital Canvas ---
-    # return_image_data=True explicitly overrides Streamlit's default behavior![cite: 1]
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3, 
@@ -116,7 +172,6 @@ else:
         if canvas_result.image_data is not None:
             with st.spinner("The AI Tutor is checking your work..."):
                 try:
-                    # Layer the transparent blue ink directly over the Matplotlib background[cite: 1]
                     ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
                     bg = st.session_state.bg_image.convert("RGBA")
                     
