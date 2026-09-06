@@ -150,8 +150,6 @@ with col2:
 current_color_hex = PEN_COLORS[st.session_state.color_index]
 current_color_name = COLOR_NAMES[st.session_state.color_index]
 
-st.write(f"Write right over the text to cross out denominators. You are currently using the **{current_color_name}** pen.")
-
 if st.session_state.generating:
     with st.spinner("Generating problem..."):
         n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm = generate_fraction_problem()
@@ -159,7 +157,7 @@ if st.session_state.generating:
         st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
         st.session_state.starting_ink = None 
-        st.session_state.color_index = 0 # Reset pen to blue for new problems
+        st.session_state.color_index = 0 
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
         st.rerun()
@@ -167,10 +165,17 @@ if st.session_state.generating:
 else:
     eq_str, lcm = st.session_state.math_data
     
+    st.write(f"Cross out the denominators! Current pen: **{current_color_name}**")
+    
+    tool = st.radio("Tool Selection", ["🖌️ Pen", "🧽 Tap-Eraser"], horizontal=True, label_visibility="collapsed")
+    
+    active_stroke_color = current_color_hex if tool == "🖌️ Pen" else "#FFFFFE"
+    active_stroke_width = 3 if tool == "🖌️ Pen" else 15
+
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
-        stroke_width=3, 
-        stroke_color=current_color_hex,
+        stroke_width=active_stroke_width, 
+        stroke_color=active_stroke_color,
         background_image=st.session_state.bg_image,
         update_streamlit=True,
         height=200,
@@ -180,6 +185,51 @@ else:
         initial_drawing=st.session_state.starting_ink,
         key=f"canvas_{st.session_state.canvas_key}",
     )
+
+    # --- THE MAGIC ERASER INTERCEPT ---
+    if canvas_result.json_data and "objects" in canvas_result.json_data:
+        objects = canvas_result.json_data["objects"]
+        
+        # Check if the secret invisible eraser hex code was just drawn
+        eraser_indices = [i for i, obj in enumerate(objects) if obj.get("stroke", "").upper() == "#FFFFFE"]
+        
+        if eraser_indices:
+            # 1. Grab the most recent eraser tap
+            e_idx = eraser_indices[-1]
+            e_obj = objects[e_idx]
+            
+            # 2. Calculate the rough center point of the eraser smudge
+            ex = e_obj.get("left", 0) + (e_obj.get("width", 0) * e_obj.get("scaleX", 1)) / 2
+            ey = e_obj.get("top", 0) + (e_obj.get("height", 0) * e_obj.get("scaleY", 1)) / 2
+            
+            # 3. Delete the invisible eraser mark from memory
+            objects.pop(e_idx)
+            
+            # 4. Collision Engine: Scan remaining strokes to find the mathematically closest one
+            if objects:
+                min_dist = float('inf')
+                closest_idx = -1
+                
+                for i, obj in enumerate(objects):
+                    ox = obj.get("left", 0) + (obj.get("width", 0) * obj.get("scaleX", 1)) / 2
+                    oy = obj.get("top", 0) + (obj.get("height", 0) * obj.get("scaleY", 1)) / 2
+                    dist = math.hypot(ex - ox, ey - oy)
+                    
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_idx = i
+                        
+                # 5. Destroy the target!
+                if closest_idx != -1:
+                    objects.pop(closest_idx)
+            
+            # 6. Forcibly update the canvas memory and reload immediately
+            st.session_state.starting_ink = {"version": "4.4.0", "objects": objects}
+            st.session_state.canvas_key += 1
+            st.rerun()
+        else:
+            # Continuously save the valid ink state so it survives generic button clicks
+            st.session_state.starting_ink = canvas_result.json_data
 
     # --- CANVAS CONTROLS ---
     col_undo, col_clear = st.columns(2)
@@ -201,7 +251,8 @@ else:
     st.write("---")
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        has_ink = canvas_result.json_data and "objects" in canvas_result.json_data and len(canvas_result.json_data["objects"]) > 0
+        # We check starting_ink to ensure we have valid content (ignoring intercept flashes)
+        has_ink = st.session_state.starting_ink and "objects" in st.session_state.starting_ink and len(st.session_state.starting_ink["objects"]) > 0
         
         if has_ink and canvas_result.image_data is not None:
             with st.spinner("The AI Tutor is checking your work..."):
@@ -218,7 +269,6 @@ else:
                     
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     
-                    # Dynamically inject the active color into the grading instructions
                     prompt = f"""
                     You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
                     The problem they are solving is: {eq_str}. 
@@ -251,9 +301,8 @@ else:
                     else:
                         st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
                         
-                        # Cycle to the next pen color so they can correct their mistake directly over the old ink
+                        # Cycle to the next pen color for corrections
                         st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
-                        st.session_state.starting_ink = canvas_result.json_data # Save the old ink state
                     
                     st.rerun()
                 except Exception as e:
