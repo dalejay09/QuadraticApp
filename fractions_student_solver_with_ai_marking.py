@@ -1,26 +1,11 @@
 import streamlit as st
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import random
 import math
-import io
 import re
-import base64
+import numpy as np
 from PIL import Image
 from google import genai
-
-# --- THE ULTIMATE MONKEY PATCH (Kept for Cloud Stability) ---
-import streamlit_drawable_canvas
-def b64_image_to_url(image, *args, **kwargs):
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-    return f"data:image/png;base64,{img_str}"
-
-streamlit_drawable_canvas.image_to_url = b64_image_to_url
 from streamlit_drawable_canvas import st_canvas
-# -----------------------------------------------------------
 
 # --- Math Engine: FRACTIONS ---
 def generate_fraction_problem():
@@ -50,32 +35,49 @@ def generate_fraction_problem():
     eq_str = f"{n1}/{denoms[0]} {op1} {n2}/{denoms[1]} {op2} {n3}/{denoms[2]}"
     return n1, denoms[0], op1, n2, denoms[1], op2, n3, denoms[2], eq_str, lcm
 
-# --- Visual Engine: HORIZONTAL EQUATION ---
-def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
-    # Wider aspect ratio for horizontal layout
-    fig, ax = plt.subplots(figsize=(8, 3), dpi=100) 
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis('off')
+# --- Native Canvas Engine: HORIZONTAL EQUATION ---
+def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
+    objects = []
+    y = 150 # Center of our 300px tall canvas
     
-    fontsize = 40
+    # Helper function to dynamically draw a fraction out of pure text & lines
+    def add_fraction(n, d, x):
+        objects.append({
+            "type": "text", "text": str(n), "left": x, "top": y - 40,
+            "fontSize": 50, "fontFamily": "sans-serif", "fill": "black",
+            "originX": "center", "originY": "center", "selectable": False, "evented": False
+        })
+        objects.append({
+            "type": "text", "text": str(d), "left": x, "top": y + 40,
+            "fontSize": 50, "fontFamily": "sans-serif", "fill": "black",
+            "originX": "center", "originY": "center", "selectable": False, "evented": False
+        })
+        objects.append({
+            "type": "line", "x1": x - 35, "y1": y, "x2": x + 35, "y2": y,
+            "stroke": "black", "strokeWidth": 5,
+            "selectable": False, "evented": False
+        })
+
+    # Helper function for plus, minus, and equals signs
+    def add_text(text, x):
+        objects.append({
+            "type": "text", "text": text, "left": x, "top": y,
+            "fontSize": 50, "fontFamily": "sans-serif", "fill": "black",
+            "originX": "center", "originY": "center", "selectable": False, "evented": False
+        })
+        
+    add_fraction(n1, d1, 120)
+    add_text(op1, 230)
+    add_fraction(n2, d2, 340)
+    add_text(op2, 450)
+    add_fraction(n3, d3, 560)
+    add_text("=", 670)
+    # The space from 700 to 800 is a massive blank void for their final answer!
     
-    # Render fractions evenly spaced using LaTeX formatting
-    ax.text(0.12, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.26, 0.5, op1, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.40, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.54, 0.5, op2, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.68, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.82, 0.5, "=", fontsize=fontsize, ha='center', va='center')
-    # The space from 0.85 to 1.0 is left entirely blank for the user's answer!
-    
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
-    plt.close(fig)
-    buf.seek(0)
-    
-    return Image.open(buf).convert('RGBA').copy()
+    return {
+        "version": "4.4.0",
+        "objects": objects
+    }
 
 # --- State Management ---
 if 'generating' not in st.session_state:
@@ -93,7 +95,7 @@ if st.session_state.generating:
     with st.spinner("Generating problem..."):
         n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm = generate_fraction_problem()
         st.session_state.math_data = (eq_str, lcm)
-        st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
+        st.session_state.fabric_state = generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
@@ -102,12 +104,13 @@ if st.session_state.generating:
 else:
     eq_str, lcm = st.session_state.math_data
     
-    # The Drawing Canvas
+    # The Drawing Canvas (NO background_image used!)
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3,
         stroke_color="#1E90FF",
-        background_image=st.session_state.bg_image,
+        background_color="#ffffff", # Force a crisp white background
+        initial_drawing=st.session_state.fabric_state, # Our native text objects!
         update_streamlit=True,
         height=300,
         width=800,
@@ -116,15 +119,11 @@ else:
     )
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        if canvas_result.image_data is not None:
-            with st.spinner("The AI Tutor is checking your work..."):
-                try:
-                    # Flatten the ink and the background into a single image for the AI
-                    ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
-                    bg = st.session_state.bg_image.convert("RGBA")
-                    if ink_img.size != bg.size:
-                        ink_img = ink_img.resize(bg.size, Image.Resampling.LANCZOS)
-                    final_canvas = Image.alpha_composite(bg, ink_img).convert("RGB")
+        try:
+            if canvas_result.image_data is not None:
+                with st.spinner("The AI Tutor is checking your work..."):
+                    # The canvas data inherently includes our native black text AND their blue ink on a white background!
+                    final_canvas = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA').convert("RGB")
                     
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     prompt = f"""
@@ -150,9 +149,10 @@ else:
                         st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
                     else:
                         st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
-                        
-                except Exception as e:
-                    st.error(f"Oops! The tutor had a glitch: {e}")
+                    
+                    st.rerun()
+        except RuntimeError:
+            st.error("Please draw something on the canvas before checking your answer!")
 
     if st.session_state.ai_feedback:
         st.info(st.session_state.ai_feedback)
