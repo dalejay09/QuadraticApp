@@ -49,7 +49,6 @@ def generate_fraction_problem():
 
 # --- Visual Engine: 1:1 PORTRAIT EQUATION ---
 def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
-    # EXACTLY 350x200 pixels to match the frontend canvas 1:1
     fig, ax = plt.subplots(figsize=(3.5, 2.0), dpi=100) 
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
     ax.set_xlim(0, 1)
@@ -65,7 +64,6 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     ax.text(0.62, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
     ax.text(0.75, 0.5, "=", fontsize=fontsize, ha='center', va='center')
     
-    # Draw the blank solution line on the far right
     ax.plot([0.83, 0.95], [0.5, 0.5], color='black', lw=2)
     
     buf = io.BytesIO()
@@ -75,8 +73,7 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return Image.open(buf).convert('RGBA').copy()
 
-# --- BACKEND STROKE RENDERER ---
-# This guarantees we never trigger a browser security crash!
+# --- BACKEND STROKE RENDERER (Now Pixel-Perfect) ---
 def render_strokes_on_image(bg_image, json_data):
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
@@ -88,11 +85,19 @@ def render_strokes_on_image(bg_image, json_data):
                 stroke_color = obj.get("stroke", "#1E90FF")
                 stroke_width = int(obj.get("strokeWidth", 3))
                 
-                # Reconstruct the user's pen strokes perfectly on the backend
+                # Fabric.js mathematically offsets paths. We calculate the offset here!
+                left = obj.get("left", 0)
+                top = obj.get("top", 0)
+                path_offset_x = obj.get("pathOffset", {}).get("x", 0)
+                path_offset_y = obj.get("pathOffset", {}).get("y", 0)
+                
                 points = []
                 for cmd in path:
                     if len(cmd) >= 3:
-                        points.append((cmd[-2], cmd[-1]))
+                        # Extract raw coordinates and apply the bounding box offset
+                        x = cmd[-2] - path_offset_x + left
+                        y = cmd[-1] - path_offset_y + top
+                        points.append((x, y))
                         
                 if len(points) > 1:
                     draw.line(points, fill=stroke_color, width=stroke_width, joint="curve")
@@ -137,11 +142,10 @@ else:
     )
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        # We explicitly check the RAW pen coordinate data, NOT the blocked image export
         if canvas_result.json_data is not None and len(canvas_result.json_data.get("objects", [])) > 0:
             with st.spinner("The AI Tutor is checking your work..."):
                 try:
-                    # Draw the ink safely on the server side
+                    # Draw the ink safely on the server side using the fixed offset logic
                     final_canvas = render_strokes_on_image(st.session_state.bg_image, canvas_result.json_data)
                     
                     # Briefly show the user exactly what Gemini is looking at!
@@ -154,15 +158,17 @@ else:
                     The Lowest Common Multiple for the denominators is {lcm}.
                     
                     I am sending you a single image of their digital workspace. 
-                    The student has written in BLUE ink directly over the top of the black printed fractions. 
-                    They are using the blue ink to cross out denominators and write new equivalent fractions.
+                    The black printed fractions are the original problem. The BLUE ink is their handwriting.
+                    The student is writing in blue ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
                     Their final answer is written in blue ink on the far right, over the black horizontal line.
                     
-                    Carefully separate the blue handwriting from the black printed text to see their logic. 
-                    Did they find the correct common denominator? Did they convert the numerators correctly? Is their final answer correct (it does not need to be simplified)?
+                    IMPORTANT GRADING RULES:
+                    1. If a fraction already has the lowest common denominator (e.g., it is already out of {lcm}), the student may leave it completely unmarked. This is correct! Do not penalize them for leaving it blank.
+                    2. Read their blue ink to see if they converted the other fractions correctly.
+                    3. Check their final answer on the right. It does not need to be simplified.
                     
-                    If they got the final answer correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them for finding the common denominator.
-                    If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong (e.g., "You found the right bottom number, but don't forget to multiply the top number too!") without giving them the final answer. Keep your tone highly supportive.
+                    If their final math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
+                    If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong without giving them the final answer. Keep your tone highly supportive.
                     """
                     
                     response = client.models.generate_content(
