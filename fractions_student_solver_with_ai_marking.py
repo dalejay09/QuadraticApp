@@ -86,7 +86,7 @@ def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return {"version": "4.4.0", "objects": objects}
 
-# --- THE FLAWLESS FABRIC.JS RENDERER ---
+# --- THE FLAWLESS BEZIER RENDERER (No validation lockouts) ---
 def render_strokes_on_image(bg_image, json_data):
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
@@ -94,8 +94,7 @@ def render_strokes_on_image(bg_image, json_data):
     if not json_data or "objects" not in json_data:
         return img.convert("RGB")
         
-    for obj in json_data["objects"]:
-        # Only process the blue ink paths the user draws
+    for obj in json_data.get("objects", []):
         if obj.get("type") == "path" and "path" in obj:
             stroke_color = obj.get("stroke", "#1E90FF")
             stroke_width = float(obj.get("strokeWidth", 3))
@@ -109,29 +108,65 @@ def render_strokes_on_image(bg_image, json_data):
             path_offset_x = float(obj.get("pathOffset", {}).get("x", 0))
             path_offset_y = float(obj.get("pathOffset", {}).get("y", 0))
             
-            # Precisely calculate the absolute visual center of the drawn stroke
-            cx = left + (width / 2) * scaleX if obj.get("originX") != "center" else left
-            cy = top + (height / 2) * scaleY if obj.get("originY") != "center" else top
+            cx = left if obj.get("originX") == "center" else left + (width * scaleX) / 2
+            cy = top if obj.get("originY") == "center" else top + (height * scaleY) / 2
             
             points = []
+            current_pos = (0, 0)
+            
             for cmd in obj["path"]:
+                if not cmd: continue
+                command = str(cmd[0]).upper()
+                
+                # Robustly extract numbers, avoiding any unexpected string glitches
                 nums = []
-                for val in cmd:
+                for val in cmd[1:]:
                     try:
                         nums.append(float(val))
                     except (ValueError, TypeError):
                         pass
                 
-                # Apply the perfect absolute translation matrix to every control point
-                for i in range(0, len(nums)-1, 2):
-                    px = cx + (nums[i] - path_offset_x) * scaleX
-                    py = cy + (nums[i+1] - path_offset_y) * scaleY
-                    points.append((px, py))
-                    
+                if command in ['M', 'L']:
+                    if len(nums) >= 2:
+                        current_pos = (nums[0], nums[1])
+                        abs_x = cx + scaleX * (current_pos[0] - path_offset_x)
+                        abs_y = cy + scaleY * (current_pos[1] - path_offset_y)
+                        points.append((abs_x, abs_y))
+                        
+                elif command == 'Q':
+                    if len(nums) >= 4:
+                        cpx, cpy = nums[0], nums[1]
+                        x, y = nums[2], nums[3]
+                        for t_step in range(1, 11): 
+                            t = t_step / 10.0
+                            px = (1-t)**2 * current_pos[0] + 2*(1-t)*t * cpx + t**2 * x
+                            py = (1-t)**2 * current_pos[1] + 2*(1-t)*t * cpy + t**2 * y
+                            
+                            abs_x = cx + scaleX * (px - path_offset_x)
+                            abs_y = cy + scaleY * (py - path_offset_y)
+                            points.append((abs_x, abs_y))
+                            
+                        current_pos = (x, y)
+                        
+                elif command == 'C':
+                    if len(nums) >= 6:
+                        cp1x, cp1y = nums[0], nums[1]
+                        cp2x, cp2y = nums[2], nums[3]
+                        x, y = nums[4], nums[5]
+                        for t_step in range(1, 11):
+                            t = t_step / 10.0
+                            px = (1-t)**3 * current_pos[0] + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * x
+                            py = (1-t)**3 * current_pos[1] + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * y
+                            
+                            abs_x = cx + scaleX * (px - path_offset_x)
+                            abs_y = cy + scaleY * (py - path_offset_y)
+                            points.append((abs_x, abs_y))
+                            
+                        current_pos = (x, y)
+            
             if len(points) == 1:
                 r = (stroke_width * scaleX) / 2
-                px, py = points[0]
-                draw.ellipse([px-r, py-r, px+r, py+r], fill=stroke_color)
+                draw.ellipse([points[0][0]-r, points[0][1]-r, points[0][0]+r, points[0][1]+r], fill=stroke_color)
             elif len(points) > 1:
                 draw.line(points, fill=stroke_color, width=int(max(1, stroke_width * scaleX)), joint="curve")
                 
@@ -144,8 +179,6 @@ if 'ai_feedback' not in st.session_state:
     st.session_state.ai_feedback = ""
 if 'canvas_key' not in st.session_state:
     st.session_state.canvas_key = 0 
-if 'last_ink' not in st.session_state:
-    st.session_state.last_ink = None # THE VAULT
 
 st.title("Fraction Master!")
 st.write("Write right over the text to cross out denominators, then put your answer at the end!")
@@ -157,7 +190,6 @@ if st.session_state.generating:
         st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.fabric_state = generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
-        st.session_state.last_ink = None # Clear the vault for the new problem
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
         st.rerun()
@@ -178,67 +210,55 @@ else:
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
-    # --- THE MEMORY VAULT CAPTURE ---
-    # Constantly watch the canvas and silently backup the ink before the button is ever clicked
-    if canvas_result.json_data and "objects" in canvas_result.json_data:
-        has_ink = any(obj.get("type") == "path" for obj in canvas_result.json_data["objects"])
-        if has_ink:
-            st.session_state.last_ink = canvas_result.json_data
-
     if st.button("Check My Answer!", type="primary", use_container_width=True):
         
-        # Read from the vault to bypass the Streamlit mobile refresh glitch entirely!
-        json_to_render = st.session_state.last_ink 
-        
-        if json_to_render:
-            with st.spinner("The AI Tutor is checking your work..."):
-                try:
-                    final_canvas = render_strokes_on_image(st.session_state.bg_image, json_to_render)
-                    
-                    st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
-                    
-                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                    prompt = f"""
-                    You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
-                    The problem they are solving is: {eq_str}. 
-                    The Lowest Common Multiple for the denominators is {lcm}.
-                    
-                    I am sending you a single image of their digital workspace. 
-                    The black printed fractions are the original problem. The BLUE ink is their handwriting.
-                    The student is writing in blue ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
-                    Their final answer is written in blue ink on the far right, over the black horizontal line.
-                    
-                    IMPORTANT GRADING RULES:
-                    1. First, silently calculate the correct final numerator and denominator yourself.
-                    2. Read their blue ink to see if they converted the original fractions correctly.
-                    3. SPECIAL RULE: If a fraction already has the lowest common denominator, the student may leave it completely unmarked. This is correct logic! Do not tell them they missed a step or forgot to mark it.
-                    4. Check their final answer on the right. It does not need to be simplified.
-                    
-                    If their final math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
-                    If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong without giving them the final answer. Keep your tone highly supportive.
-                    """
-                    
-                    response = client.models.generate_content(
-                        model='gemini-3.6-flash',
-                        contents=[prompt, final_canvas]
-                    )
-                    
-                    resp_text = response.text.strip()
-                    if resp_text.upper().startswith("CORRECT"):
-                        st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
-                    else:
-                        st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
-                    
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Oops! The tutor had a glitch: {e}")
-        else:
-            st.error("Please draw your working on the canvas before checking your answer!")
+        # Absolute bypass: No validation, no errors. It grabs whatever data exists and grades it immediately!
+        with st.spinner("The AI Tutor is checking your work..."):
+            try:
+                json_data = canvas_result.json_data if canvas_result else None
+                final_canvas = render_strokes_on_image(st.session_state.bg_image, json_data)
+                
+                st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
+                
+                client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                prompt = f"""
+                You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
+                The problem they are solving is: {eq_str}. 
+                The Lowest Common Multiple for the denominators is {lcm}.
+                
+                I am sending you a single image of their digital workspace. 
+                The black printed fractions are the original problem. The BLUE ink is their handwriting.
+                The student is writing in blue ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
+                Their final answer is written in blue ink on the far right, over the black horizontal line.
+                
+                IMPORTANT GRADING RULES:
+                1. First, silently calculate the correct final numerator and denominator yourself.
+                2. Read their blue ink to see if they converted the original fractions correctly.
+                3. SPECIAL RULE: If a fraction already has the lowest common denominator, the student may leave it completely unmarked. This is correct logic! Do not tell them they missed a step or forgot to mark it.
+                4. Check their final answer on the right. It does not need to be simplified.
+                
+                If their final math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
+                If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong without giving them the final answer. Keep your tone highly supportive.
+                """
+                
+                response = client.models.generate_content(
+                    model='gemini-3.6-flash',
+                    contents=[prompt, final_canvas]
+                )
+                
+                resp_text = response.text.strip()
+                if resp_text.upper().startswith("CORRECT"):
+                    st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
+                else:
+                    st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
+                
+                st.rerun()
+            except Exception as e:
+                st.error(f"Oops! The tutor had a glitch: {e}")
 
     if st.session_state.ai_feedback:
         st.info(st.session_state.ai_feedback)
 
     if st.button("Give me a new problem!", use_container_width=True):
         st.session_state.generating = True
-        st.session_state.last_ink = None
         st.rerun()
