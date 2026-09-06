@@ -169,7 +169,6 @@ if 'user_frac_input' not in st.session_state:
 def handle_settings_change():
     st.session_state.generating = True
 
-# --- Auto-Format Callback ---
 def format_fraction_input():
     raw_input = st.session_state.user_frac_input
     if raw_input:
@@ -210,12 +209,10 @@ else:
     
     st.write(f"Cross out the denominators! Current pen: **{current_color_name}**")
 
-    # --- COMPACT RADIO TOOLBAR ---
     tool = st.radio("Tool", ["🖌️ Pen", "🧽 Tap-Eraser"], horizontal=True, label_visibility="collapsed")
     active_stroke_color = current_color_hex if tool == "🖌️ Pen" else "#FFFFFE"
     active_stroke_width = 3 if tool == "🖌️ Pen" else 15
 
-    # --- THE DIGITAL CANVAS ---
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=active_stroke_width, 
@@ -230,7 +227,6 @@ else:
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
-    # --- ACTION BUTTONS ---
     col_u, col_c = st.columns(2)
     with col_u:
         if st.button("↩️ Undo", use_container_width=True):
@@ -248,7 +244,6 @@ else:
             st.session_state.canvas_key += 1
             st.rerun()
 
-    # --- THE BOUNDING BOX COLLISION ENGINE ---
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
     last_saved_objects = st.session_state.stroke_history[-1]
 
@@ -292,11 +287,9 @@ else:
 
     st.write("---")
     
-    # --- HYBRID NATIVE INPUT ---
     st.text_input("Type your final answer:", placeholder="e.g. 35.70 or 35/70", key="user_frac_input", on_change=format_fraction_input)
     user_answer = st.session_state.user_frac_input
     
-    # --- JAVASCRIPT INJECTION: FORCE NUMERIC KEYPAD ---
     components.html(
         """
         <script>
@@ -332,14 +325,17 @@ else:
             else:
                 st.error("Please type two numbers separated by a symbol (like 35.70 or 35/70).")
         else:
-            st.error("Please type your final answer!")
+            # If the box is blank, trigger a local check fail so they can ask the AI
+            st.session_state.local_checked = True
+            st.session_state.is_correct = False
+            st.session_state.ai_feedback = ""
 
-    # --- AI DIAGNOSTICS (With Override Logic) ---
+    # --- AI DIAGNOSTICS & STRUCTURED OUTPUT PARSING ---
     if st.session_state.local_checked:
         if st.session_state.is_correct:
             st.success(st.session_state.ai_feedback)
         else:
-            st.warning("💡 **Almost there!** That final fraction isn't quite right.")
+            st.warning("💡 **Almost there!** The final answer isn't quite right, or is missing.")
             
             if st.button("🤖 Ask AI Tutor to check my workings", use_container_width=True):
                 if canvas_result.image_data is not None:
@@ -358,15 +354,19 @@ else:
                             The problem is: {eq_str}. 
                             The mathematically correct final answer is equivalent to {target_num}/{lcm}.
                             
-                            The student typed their final answer as {st.session_state.user_typed_num}/{st.session_state.user_typed_den}, which is INCORRECT.
-                            
                             I am sending you an image of their digital workspace. 
                             The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions. They may have also handwritten their final answer on the right side of the canvas over the horizontal line.
                             
                             IMPORTANT GRADING RULES:
                             1. The student may have tried this problem multiple times. Their LATEST attempt is written in {current_color_name} ink. Treat other colors as older mistakes.
-                            2. OVERRIDE RULE: Look closely at their LATEST {current_color_name} handwritten final answer on the far right. If their {current_color_name} handwritten final answer is mathematically CORRECT (equivalent to {target_num}/{lcm}), ignore their typed answer! They just forgot to update the box. Reply EXACTLY with the word "CORRECT:" on the first line, followed by praise for fixing their workings.
-                            3. If their handwritten answer is still incorrect or missing, figure out WHERE they went wrong in their {current_color_name} workings. Reply EXACTLY with the word "INCORRECT:" on the first line, and gently explain their mistake to help them. Keep your tone highly supportive.
+                            2. Look closely at their LATEST {current_color_name} handwritten final answer on the far right. 
+                            3. If their {current_color_name} handwritten final answer is mathematically CORRECT (equivalent to {target_num}/{lcm}), their verdict is CORRECT.
+                            4. If their handwritten answer is incorrect or missing, figure out WHERE they went wrong in their {current_color_name} workings. Their verdict is INCORRECT.
+                            
+                            YOU MUST FORMAT YOUR RESPONSE EXACTLY LIKE THIS (Three lines, no extra text):
+                            VERDICT: [Write EXACTLY "CORRECT" or "INCORRECT"]
+                            FOUND_FRACTION: [If they wrote a final fraction on the far right, write it here like "35/50". If they left it blank, write "NONE"]
+                            MESSAGE: [Your gentle explanation or praise here]
                             """
                             
                             response = client.models.generate_content(
@@ -376,11 +376,27 @@ else:
                             
                             resp_text = response.text.strip()
                             
-                            if resp_text.upper().startswith("CORRECT"):
-                                st.session_state.is_correct = True
-                                st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
+                            # Structured Parser
+                            match = re.search(r'VERDICT:\s*(CORRECT|INCORRECT)\s*\nFOUND_FRACTION:\s*(.*?)\s*\nMESSAGE:\s*(.*)', resp_text, re.IGNORECASE | re.DOTALL)
+                            
+                            if match:
+                                verdict = match.group(1).upper()
+                                found_fraction = match.group(2).strip()
+                                message = match.group(3).strip()
+                                
+                                # Magic UI Update: If AI found a fraction, inject it into the text box
+                                if found_fraction.upper() != "NONE" and re.match(r'^-?\d+/-?\d+$', found_fraction):
+                                    st.session_state.user_frac_input = found_fraction
+                                
+                                if verdict == "CORRECT":
+                                    st.session_state.is_correct = True
+                                    st.session_state.ai_feedback = f"🌟 **Awesome job!** {message}"
+                                else:
+                                    st.session_state.ai_feedback = message
+                                    st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                             else:
-                                st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text)
+                                # Fallback if AI hallucinates the format
+                                st.session_state.ai_feedback = resp_text
                                 st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                                 
                             st.rerun()
