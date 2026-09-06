@@ -44,7 +44,6 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     
     fontsize = 28
     
-    # Mathematical mapping to exactly match the 350x200 frontend canvas
     ax.text(0.10, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
     ax.text(0.23, 0.5, op1, fontsize=fontsize, ha='center', va='center')
     ax.text(0.36, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
@@ -87,7 +86,7 @@ def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return {"version": "4.4.0", "objects": objects}
 
-# --- THE BARE-METAL STROKE RENDERER ---
+# --- THE BULLETPROOF STROKE RENDERER ---
 def render_strokes_on_image(bg_image, json_data):
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
@@ -96,26 +95,37 @@ def render_strokes_on_image(bg_image, json_data):
         return img.convert("RGB")
         
     for obj in json_data["objects"]:
-        # Isolate only the blue freehand paths the user drew
         if obj.get("type") == "path" and "path" in obj:
             path = obj["path"]
             stroke_color = obj.get("stroke", "#1E90FF")
             stroke_width = int(obj.get("strokeWidth", 3))
             
+            # Extract the offset coordinates of the stroke's bounding box center
+            path_offset_x = obj.get("pathOffset", {}).get("x", 0)
+            path_offset_y = obj.get("pathOffset", {}).get("y", 0)
+            
+            left = obj.get("left", 0)
+            top = obj.get("top", 0)
+            
+            originX = obj.get("originX", "left")
+            originY = obj.get("originY", "top")
+            
+            # Calculate the true absolute center translation of the stroke
+            tx = left + path_offset_x if originX == "left" else left
+            ty = top + path_offset_y if originY == "top" else top
+            
             points = []
             for cmd in path:
-                # The browser sends pure absolute canvas coordinates. We grab the x and y!
+                # Extract every micro-coordinate from the Bezier curve commands
                 nums = [val for val in cmd if isinstance(val, (int, float))]
-                if len(nums) >= 2:
-                    points.append((nums[-2], nums[-1]))
-                    
-            if len(points) == 1:
-                # Catch a tiny tap or dot
-                x, y = points[0]
-                r = stroke_width / 2
-                draw.ellipse([x - r, y - r, x + r, y + r], fill=stroke_color)
-            elif len(points) > 1:
-                # Draw the smooth curve natively
+                for i in range(0, len(nums), 2):
+                    if i + 1 < len(nums):
+                        px, py = nums[i], nums[i+1]
+                        # Add the relative point to the absolute center translation
+                        points.append((tx + px, ty + py))
+                        
+            if len(points) > 1:
+                # Draw the smooth curve organically using all control points
                 draw.line(points, fill=stroke_color, width=stroke_width, joint="curve")
                 
     return img.convert("RGB")
