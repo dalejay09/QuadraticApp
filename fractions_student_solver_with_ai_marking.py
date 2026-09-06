@@ -122,13 +122,14 @@ def generate_fraction_problem():
                 n2 = random.randint(1, d2 - 1) if d2 > 1 else 1
                 
                 op1 = random.choice(['+', '-', 'x'])
+                true_lcm = math.lcm(d1, d2)
                 
                 if op1 == '+':
-                    target_num = (n1 * d2) + (n2 * d1)
-                    target_den = d1 * d2
+                    target_num = (n1 * (true_lcm // d1)) + (n2 * (true_lcm // d2))
+                    target_den = true_lcm
                 elif op1 == '-':
-                    target_num = (n1 * d2) - (n2 * d1)
-                    target_den = d1 * d2
+                    target_num = (n1 * (true_lcm // d1)) - (n2 * (true_lcm // d2))
+                    target_den = true_lcm
                 else:
                     target_num = n1 * n2
                     target_den = d1 * d2
@@ -141,8 +142,7 @@ def generate_fraction_problem():
                 continue
 
             eq_str = f"{n1}/{d1} {op1} {n2}/{d2}"
-            lcm = math.lcm(d1, d2)
-            return n1, d1, op1, n2, d2, None, None, None, eq_str, lcm, target_num, target_den
+            return n1, d1, op1, n2, d2, None, None, None, eq_str, true_lcm, target_num, target_den
 
 # --- Visual Engine: BACKEND MATPLOTLIB ---
 def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
