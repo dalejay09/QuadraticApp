@@ -210,7 +210,7 @@ if 'pending_frac_update' not in st.session_state: st.session_state.pending_frac_
 if 'transition_to_simplify' not in st.session_state: st.session_state.transition_to_simplify = False
 
 # --- Phase Transition Engine ---
-if st.session_state.transition_to_simplify:
+if getattr(st.session_state, 'transition_to_simplify', False):
     n1 = st.session_state.unsimplified_num
     d1 = st.session_state.unsimplified_den
     eq_str = f"{n1}/{d1}"
@@ -221,7 +221,7 @@ if st.session_state.transition_to_simplify:
     
     st.session_state.ai_feedback = f"🌟 **Awesome job!** You correctly found {n1}/{d1}. Now, can you simplify it to its lowest terms?"
     st.session_state.color_index = 0
-    st.session_state.local_checked = True 
+    st.session_state.local_checked = False  # FIX: Turn off grading state!
     st.session_state.is_correct = False
     st.session_state.user_frac_input = ""
     st.session_state.pending_frac_update = None
@@ -256,7 +256,6 @@ def process_correct_answer(user_num, user_den):
                 st.session_state.is_correct = False
                 st.session_state.ai_feedback = f"💡 **Almost there!** {user_num}/{user_den} is mathematically correct, but it can be simplified further! Find a common factor."
             else:
-                # Trigger the phase transition!
                 st.session_state.transition_to_simplify = True
                 st.session_state.unsimplified_num = user_num
                 st.session_state.unsimplified_den = user_den
@@ -271,7 +270,6 @@ with col2:
     with st.popover("⚙️", use_container_width=True):
         st.radio("Fractions per problem", [1, 2, 3], key="frac_count", on_change=handle_frac_count_change)
         
-        # Lock simplify to "Yes" if frac_count is 1
         disabled_simp = (st.session_state.frac_count == 1)
         st.radio("Simplify Answers", ["Yes", "No"], key="simplify_answers", on_change=handle_settings_change, disabled=disabled_simp)
         st.radio("Max LCM Limit", [50, 100, 200], key="max_lcm", on_change=handle_settings_change)
@@ -422,7 +420,7 @@ else:
                         st.session_state.is_correct = False
                         st.session_state.ai_feedback = ""
                         
-                    if st.session_state.transition_to_simplify:
+                    if getattr(st.session_state, 'transition_to_simplify', False):
                         st.rerun()
             else:
                 st.error("Please type two numbers separated by a symbol (like 35.70 or 35/70).")
@@ -436,90 +434,93 @@ else:
         if st.session_state.is_correct:
             st.success(st.session_state.ai_feedback)
         else:
-            if not getattr(st.session_state, 'transition_to_simplify', False):
+            # Render specific local simplification warning if it exists
+            if "can be simplified further" in st.session_state.ai_feedback:
+                st.warning(st.session_state.ai_feedback)
+            else:
                 st.warning("💡 **Almost there!** The final answer isn't quite right, or is missing.")
                 
-                if st.button("🤖 Ask AI Tutor to check my workings", use_container_width=True):
-                    if canvas_result.image_data is not None:
-                        with st.spinner("The AI Tutor is reviewing your handwritten workings..."):
-                            try:
-                                ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
-                                bg = st.session_state.bg_image.convert("RGBA")
-                                if ink_img.size != bg.size:
-                                    ink_img = ink_img.resize(bg.size, Image.Resampling.LANCZOS)
-                                final_canvas = Image.alpha_composite(bg, ink_img).convert("RGB")
+            if st.button("🤖 Ask AI Tutor to check my workings", use_container_width=True):
+                if canvas_result.image_data is not None:
+                    with st.spinner("The AI Tutor is reviewing your handwritten workings..."):
+                        try:
+                            ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
+                            bg = st.session_state.bg_image.convert("RGBA")
+                            if ink_img.size != bg.size:
+                                ink_img = ink_img.resize(bg.size, Image.Resampling.LANCZOS)
+                            final_canvas = Image.alpha_composite(bg, ink_img).convert("RGB")
+                            
+                            client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                            
+                            if st.session_state.current_frac_count == 1:
+                                task_info = f"The student is asked to SIMPLIFY the fraction {eq_str} to its lowest terms. The mathematically correct final simplified answer is equivalent to {target_num}/{target_den}, but MUST have no common factors."
+                                grading_3 = f"3. If their {current_color_name} handwritten final answer is mathematically CORRECT AND FULLY SIMPLIFIED (no common factors), their verdict is CORRECT."
+                                grading_4 = f"4. If their handwritten answer is incorrect, missing, OR not fully simplified, figure out WHERE they went wrong. Their verdict is INCORRECT."
+                            else:
+                                task_info = f"The problem is: {eq_str}. The mathematically correct final answer is equivalent to {target_num}/{target_den}."
+                                grading_3 = f"3. If their {current_color_name} handwritten final answer is mathematically CORRECT (equivalent to {target_num}/{target_den}), their verdict is CORRECT."
+                                grading_4 = f"4. If their handwritten answer is incorrect or missing, figure out WHERE they went wrong in their {current_color_name} workings. Their verdict is INCORRECT."
+                            
+                            prompt = f"""
+                            You are a gentle, encouraging math tutor helping a 9-year-old learn fractions.
+                            {task_info}
+                            
+                            I am sending you an image of their digital workspace. 
+                            The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions. They may have also handwritten their final answer on the right side of the canvas over the horizontal line.
+                            
+                            IMPORTANT GRADING RULES:
+                            1. The student may have tried this problem multiple times. Their LATEST attempt is written in {current_color_name} ink. Treat other colors as older mistakes.
+                            2. Look closely at their LATEST {current_color_name} handwritten final answer on the far right. 
+                            {grading_3}
+                            {grading_4}
+                            5. Note: If the problem is multiplication, they do not need to find a common denominator.
+                            6. If their verdict is CORRECT, you MUST extract the final fraction they wrote on the canvas so the system can process it. Do not leave it as NONE if they got it right.
+                            
+                            YOU MUST FORMAT YOUR RESPONSE EXACTLY LIKE THIS (Three lines, no extra text):
+                            VERDICT: [Write EXACTLY "CORRECT" or "INCORRECT"]
+                            FOUND_FRACTION: [If they wrote a final fraction on the far right, write it here like "35/50". If they left it blank, write "NONE"]
+                            MESSAGE: [Your gentle explanation or praise here]
+                            """
+                            
+                            response = client.models.generate_content(
+                                model='gemini-3.6-flash',
+                                contents=[prompt, final_canvas]
+                            )
+                            
+                            resp_text = response.text.strip()
+                            
+                            match = re.search(r'VERDICT:\s*(CORRECT|INCORRECT)\s*\nFOUND_FRACTION:\s*(.*?)\s*\nMESSAGE:\s*(.*)', resp_text, re.IGNORECASE | re.DOTALL)
+                            
+                            if match:
+                                verdict = match.group(1).upper()
+                                found_fraction = match.group(2).strip()
+                                message = match.group(3).strip()
                                 
-                                client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                                found_num, found_den = target_num, target_den
+                                if found_fraction.upper() != "NONE" and re.match(r'^-?\d+/-?\d+$', found_fraction):
+                                    st.session_state.pending_frac_update = found_fraction
+                                    parts = found_fraction.split('/')
+                                    found_num, found_den = int(parts[0]), int(parts[1])
                                 
-                                # Dynamic Context based on Mode
-                                if st.session_state.current_frac_count == 1:
-                                    task_info = f"The student is asked to SIMPLIFY the fraction {eq_str} to its lowest terms. The mathematically correct final simplified answer is equivalent to {target_num}/{target_den}, but MUST have no common factors."
-                                    grading_3 = f"3. If their {current_color_name} handwritten final answer is mathematically CORRECT AND FULLY SIMPLIFIED (no common factors), their verdict is CORRECT."
-                                    grading_4 = f"4. If their handwritten answer is incorrect, missing, OR not fully simplified, figure out WHERE they went wrong. Their verdict is INCORRECT."
+                                if verdict == "CORRECT":
+                                    process_correct_answer(found_num, found_den)
                                 else:
-                                    task_info = f"The problem is: {eq_str}. The mathematically correct final answer is equivalent to {target_num}/{target_den}."
-                                    grading_3 = f"3. If their {current_color_name} handwritten final answer is mathematically CORRECT (equivalent to {target_num}/{target_den}), their verdict is CORRECT."
-                                    grading_4 = f"4. If their handwritten answer is incorrect or missing, figure out WHERE they went wrong in their {current_color_name} workings. Their verdict is INCORRECT."
-                                
-                                prompt = f"""
-                                You are a gentle, encouraging math tutor helping a 9-year-old learn fractions.
-                                {task_info}
-                                
-                                I am sending you an image of their digital workspace. 
-                                The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions. They may have also handwritten their final answer on the right side of the canvas over the horizontal line.
-                                
-                                IMPORTANT GRADING RULES:
-                                1. The student may have tried this problem multiple times. Their LATEST attempt is written in {current_color_name} ink. Treat other colors as older mistakes.
-                                2. Look closely at their LATEST {current_color_name} handwritten final answer on the far right. 
-                                {grading_3}
-                                {grading_4}
-                                5. Note: If the problem is multiplication, they do not need to find a common denominator.
-                                6. If their verdict is CORRECT, you MUST extract the final fraction they wrote on the canvas so the system can process it. Do not leave it as NONE if they got it right.
-                                
-                                YOU MUST FORMAT YOUR RESPONSE EXACTLY LIKE THIS (Three lines, no extra text):
-                                VERDICT: [Write EXACTLY "CORRECT" or "INCORRECT"]
-                                FOUND_FRACTION: [If they wrote a final fraction on the far right, write it here like "35/50". If they left it blank, write "NONE"]
-                                MESSAGE: [Your gentle explanation or praise here]
-                                """
-                                
-                                response = client.models.generate_content(
-                                    model='gemini-3.6-flash',
-                                    contents=[prompt, final_canvas]
-                                )
-                                
-                                resp_text = response.text.strip()
-                                
-                                match = re.search(r'VERDICT:\s*(CORRECT|INCORRECT)\s*\nFOUND_FRACTION:\s*(.*?)\s*\nMESSAGE:\s*(.*)', resp_text, re.IGNORECASE | re.DOTALL)
-                                
-                                if match:
-                                    verdict = match.group(1).upper()
-                                    found_fraction = match.group(2).strip()
-                                    message = match.group(3).strip()
-                                    
-                                    found_num, found_den = target_num, target_den # Fallback
-                                    if found_fraction.upper() != "NONE" and re.match(r'^-?\d+/-?\d+$', found_fraction):
-                                        st.session_state.pending_frac_update = found_fraction
-                                        parts = found_fraction.split('/')
-                                        found_num, found_den = int(parts[0]), int(parts[1])
-                                    
-                                    if verdict == "CORRECT":
-                                        process_correct_answer(found_num, found_den)
-                                    else:
-                                        st.session_state.ai_feedback = message
-                                        st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
-                                else:
-                                    st.session_state.ai_feedback = resp_text
+                                    st.session_state.ai_feedback = f"🤖 **Tutor says:** {message}"
                                     st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
-                                    
-                                st.rerun()
+                            else:
+                                st.session_state.ai_feedback = resp_text
+                                st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                                 
-                            except Exception as e:
-                                st.error(f"Oops! The tutor had a glitch: {e}")
-                    else:
-                        st.error("Please draw your working on the canvas first!")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Oops! The tutor had a glitch: {e}")
+                else:
+                    st.error("Please draw your working on the canvas first!")
 
-    if st.session_state.ai_feedback and not st.session_state.is_correct:
-        st.info(f"**Tutor says:** {st.session_state.ai_feedback}")
+    # Display isolated AI or Phase Transition feedback safely
+    if st.session_state.ai_feedback and not st.session_state.is_correct and "can be simplified further" not in st.session_state.ai_feedback:
+        st.info(st.session_state.ai_feedback)
 
     st.write("")
     if st.button("Give me a new problem!", use_container_width=True):
