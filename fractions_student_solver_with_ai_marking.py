@@ -31,74 +31,96 @@ COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
 # --- Math Engine: FRACTIONS ---
 def generate_fraction_problem():
     max_lcm = st.session_state.get('max_lcm', 100)
+    frac_count = st.session_state.get('frac_count', 3)
     
     if max_lcm <= 100:
         pool = list(range(2, 11))
     else:
         pool = list(range(2, 16)) + [20, 30, 40, 50, 60, 70, 80, 90, 100]
         
-    rand_val = random.random()
-    if rand_val < 0.4:
-        variant = 1 
-    elif rand_val < 0.6:
-        variant = 2 
-    elif rand_val < 0.8:
-        variant = 3 
-    else:
-        variant = 4 
-        
-    valid_combinations = []
-    
-    if variant == 1:
-        for c in combinations(pool, 3):
-            L = math.lcm(math.lcm(c[0], c[1]), c[2])
-            if L <= max_lcm and L not in c:
-                valid_combinations.append(list(c))
-    elif variant == 2:
-        for c in combinations(pool, 3):
-            L = math.lcm(math.lcm(c[0], c[1]), c[2])
-            if L <= max_lcm and L in c:
-                valid_combinations.append(list(c))
-    elif variant == 3:
-        for L in pool:
-            if L <= max_lcm:
-                for f in pool:
-                    if L != f and L % f == 0:
-                        valid_combinations.append([L, L, f])
-    elif variant == 4:
-        for L in pool:
-            if L <= max_lcm:
-                for f in pool:
-                    if L != f and L % f == 0:
-                        valid_combinations.append([L, f, f])
-                        
-    if not valid_combinations:
-        valid_combinations = [[2, 3, 4]]
-        
-    chosen_denoms = random.choice(valid_combinations)
-    random.shuffle(chosen_denoms) 
-    d1, d2, d3 = chosen_denoms
-    lcm = math.lcm(math.lcm(d1, d2), d3)
-    
-    while True:
-        n1 = random.randint(1, d1 - 1)
-        n2 = random.randint(1, d2 - 1)
-        n3 = random.randint(1, d3 - 1)
-        
-        op1 = random.choice(['+', '-'])
-        op2 = random.choice(['+', '-'])
-        
-        v1 = n1 / d1
-        v2 = n2 / d2 if op1 == '+' else -n2 / d2
-        v3 = n3 / d3 if op2 == '+' else -n3 / d3
-        
-        if v1 + v2 + v3 > 0:
-            break
+    if frac_count == 3:
+        # --- 3 FRACTION LOGIC (+ and - only) ---
+        rand_val = random.random()
+        if rand_val < 0.4: variant = 1 
+        elif rand_val < 0.6: variant = 2 
+        elif rand_val < 0.8: variant = 3 
+        else: variant = 4 
             
-    eq_str = f"{n1}/{d1} {op1} {n2}/{d2} {op2} {n3}/{d3}"
-    target_num = int(v1 * lcm + v2 * lcm + v3 * lcm)
-    
-    return n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm, target_num
+        valid_combinations = []
+        if variant == 1:
+            for c in combinations(pool, 3):
+                L = math.lcm(math.lcm(c[0], c[1]), c[2])
+                if L <= max_lcm and L not in c: valid_combinations.append(list(c))
+        elif variant == 2:
+            for c in combinations(pool, 3):
+                L = math.lcm(math.lcm(c[0], c[1]), c[2])
+                if L <= max_lcm and L in c: valid_combinations.append(list(c))
+        elif variant == 3:
+            for L in pool:
+                if L <= max_lcm:
+                    for f in pool:
+                        if L != f and L % f == 0: valid_combinations.append([L, L, f])
+        elif variant == 4:
+            for L in pool:
+                if L <= max_lcm:
+                    for f in pool:
+                        if L != f and L % f == 0: valid_combinations.append([L, f, f])
+                            
+        if not valid_combinations:
+            valid_combinations = [[2, 3, 4]]
+            
+        chosen_denoms = random.choice(valid_combinations)
+        random.shuffle(chosen_denoms) 
+        d1, d2, d3 = chosen_denoms
+        lcm = math.lcm(math.lcm(d1, d2), d3)
+        
+        while True:
+            n1 = random.randint(1, d1 - 1)
+            n2 = random.randint(1, d2 - 1)
+            n3 = random.randint(1, d3 - 1)
+            
+            op1 = random.choice(['+', '-'])
+            op2 = random.choice(['+', '-'])
+            
+            v1_num = n1 * (lcm // d1)
+            v2_num = n2 * (lcm // d2) if op1 == '+' else -n2 * (lcm // d2)
+            v3_num = n3 * (lcm // d3) if op2 == '+' else -n3 * (lcm // d3)
+            
+            target_num = v1_num + v2_num + v3_num
+            target_den = lcm
+            
+            if target_num > 0:
+                break
+                
+        eq_str = f"{n1}/{d1} {op1} {n2}/{d2} {op2} {n3}/{d3}"
+        return n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm, target_num, target_den
+
+    else:
+        # --- 2 FRACTION LOGIC (+, -, and x) ---
+        while True:
+            d1 = random.choice(pool)
+            d2 = random.choice(pool)
+            n1 = random.randint(1, d1 - 1) if d1 > 1 else 1
+            n2 = random.randint(1, d2 - 1) if d2 > 1 else 1
+            
+            op1 = random.choice(['+', '-', 'x'])
+            
+            if op1 == '+':
+                target_num = (n1 * d2) + (n2 * d1)
+                target_den = d1 * d2
+            elif op1 == '-':
+                target_num = (n1 * d2) - (n2 * d1)
+                target_den = d1 * d2
+            else:
+                target_num = n1 * n2
+                target_den = d1 * d2
+                
+            if target_num > 0:
+                break
+                
+        eq_str = f"{n1}/{d1} {op1} {n2}/{d2}"
+        lcm = math.lcm(d1, d2)
+        return n1, d1, op1, n2, d2, None, None, None, eq_str, lcm, target_num, target_den
 
 # --- Visual Engine: BACKEND MATPLOTLIB ---
 def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
@@ -110,13 +132,26 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     
     fontsize = 28
     
-    ax.text(0.10, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.23, 0.5, op1, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.36, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.49, 0.5, op2, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.62, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.75, 0.5, "=", fontsize=fontsize, ha='center', va='center')
-    ax.plot([0.814, 0.942], [0.5, 0.5], color='black', lw=2)
+    # Render proper multiplication sign if needed
+    op1_disp = r'$\times$' if op1 == 'x' else op1
+    
+    if n3 is None:
+        # 2 Fractions Centered Layout
+        ax.text(0.25, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
+        ax.text(0.40, 0.5, op1_disp, fontsize=fontsize, ha='center', va='center')
+        ax.text(0.55, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
+        ax.text(0.70, 0.5, "=", fontsize=fontsize, ha='center', va='center')
+        ax.plot([0.764, 0.892], [0.5, 0.5], color='black', lw=2)
+    else:
+        # 3 Fractions Wide Layout
+        op2_disp = r'$\times$' if op2 == 'x' else op2
+        ax.text(0.10, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
+        ax.text(0.23, 0.5, op1_disp, fontsize=fontsize, ha='center', va='center')
+        ax.text(0.36, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
+        ax.text(0.49, 0.5, op2_disp, fontsize=fontsize, ha='center', va='center')
+        ax.text(0.62, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
+        ax.text(0.75, 0.5, "=", fontsize=fontsize, ha='center', va='center')
+        ax.plot([0.814, 0.942], [0.5, 0.5], color='black', lw=2)
     
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
@@ -149,6 +184,8 @@ if 'canvas_key' not in st.session_state:
     st.session_state.canvas_key = 0 
 if 'max_lcm' not in st.session_state:
     st.session_state.max_lcm = 100
+if 'frac_count' not in st.session_state:
+    st.session_state.frac_count = 3
 if 'color_index' not in st.session_state:
     st.session_state.color_index = 0
 if 'stroke_history' not in st.session_state:
@@ -183,6 +220,7 @@ with col1:
     st.title("Fraction Master!")
 with col2:
     with st.popover("⚙️", use_container_width=True):
+        st.radio("Fractions per problem", [2, 3], key="frac_count", on_change=handle_settings_change)
         st.radio("Max LCM Limit", [50, 100, 200], key="max_lcm", on_change=handle_settings_change)
 
 current_color_hex = PEN_COLORS[st.session_state.color_index]
@@ -190,8 +228,8 @@ current_color_name = COLOR_NAMES[st.session_state.color_index]
 
 if st.session_state.generating:
     with st.spinner("Generating problem..."):
-        n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm, target_num = generate_fraction_problem()
-        st.session_state.math_data = (eq_str, lcm, target_num)
+        n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm, target_num, target_den = generate_fraction_problem()
+        st.session_state.math_data = (eq_str, lcm, target_num, target_den)
         st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
         st.session_state.color_index = 0 
@@ -208,7 +246,7 @@ if st.session_state.generating:
         st.rerun()
 
 else:
-    eq_str, lcm, target_num = st.session_state.math_data
+    eq_str, lcm, target_num, target_den = st.session_state.math_data
     
     st.write(f"Cross out the denominators! Current pen: **{current_color_name}**")
 
@@ -324,7 +362,7 @@ else:
                     st.session_state.user_typed_num = user_num
                     st.session_state.user_typed_den = user_den
                     
-                    if user_num * lcm == target_num * user_den:
+                    if user_num * target_den == target_num * user_den:
                         st.session_state.is_correct = True
                         st.session_state.ai_feedback = "🌟 **Awesome job!** Your math is absolutely perfect!"
                     else:
@@ -357,9 +395,9 @@ else:
                             client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                             
                             prompt = f"""
-                            You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
+                            You are a gentle, encouraging math tutor helping a 9-year-old learn fractions.
                             The problem is: {eq_str}. 
-                            The mathematically correct final answer is equivalent to {target_num}/{lcm}.
+                            The mathematically correct final answer is equivalent to {target_num}/{target_den}.
                             
                             I am sending you an image of their digital workspace. 
                             The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions. They may have also handwritten their final answer on the right side of the canvas over the horizontal line.
@@ -367,8 +405,9 @@ else:
                             IMPORTANT GRADING RULES:
                             1. The student may have tried this problem multiple times. Their LATEST attempt is written in {current_color_name} ink. Treat other colors as older mistakes.
                             2. Look closely at their LATEST {current_color_name} handwritten final answer on the far right. 
-                            3. If their {current_color_name} handwritten final answer is mathematically CORRECT (equivalent to {target_num}/{lcm}), their verdict is CORRECT.
-                            4. If their handwritten answer is incorrect or missing, figure out WHERE they went wrong in their {current_color_name} workings. Their verdict is INCORRECT.
+                            3. If their {current_color_name} handwritten final answer is mathematically CORRECT (equivalent to {target_num}/{target_den}), their verdict is CORRECT.
+                            4. If their handwritten answer is incorrect or missing, figure out WHERE they went wrong in their {current_color_name} workings. Their verdict is INCORRECT. 
+                            5. Note: If the problem is multiplication, they do not need to find a common denominator. If it is addition or subtraction, they do.
                             
                             YOU MUST FORMAT YOUR RESPONSE EXACTLY LIKE THIS (Three lines, no extra text):
                             VERDICT: [Write EXACTLY "CORRECT" or "INCORRECT"]
