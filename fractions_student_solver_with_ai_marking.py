@@ -187,6 +187,16 @@ st.markdown("""
         flex-direction: row;
         gap: 15px;
     }
+    /* Custom Styling for the Primary Button */
+    button[kind="primary"] {
+        background-color: #007AFF !important;
+        border-color: #007AFF !important;
+        color: white !important;
+    }
+    button[kind="primary"]:hover {
+        background-color: #0056b3 !important;
+        border-color: #0056b3 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
