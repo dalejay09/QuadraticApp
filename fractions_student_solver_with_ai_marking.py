@@ -165,6 +165,8 @@ if 'user_typed_den' not in st.session_state:
     st.session_state.user_typed_den = 1
 if 'user_frac_input' not in st.session_state:
     st.session_state.user_frac_input = ""
+if 'pending_frac_update' not in st.session_state:
+    st.session_state.pending_frac_update = None
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -196,6 +198,7 @@ if st.session_state.generating:
         st.session_state.local_checked = False
         st.session_state.is_correct = False
         st.session_state.user_frac_input = "" 
+        st.session_state.pending_frac_update = None
         
         st.session_state.stroke_history = [[]]
         st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
@@ -223,6 +226,7 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
+        display_toolbar=False, 
         initial_drawing=st.session_state.active_initial_drawing, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
@@ -287,6 +291,12 @@ else:
 
     st.write("---")
     
+    # --- MAGIC UI INTERCEPT ---
+    # Apply the AI's found fraction before the text box renders to prevent Streamlit State crashing
+    if st.session_state.pending_frac_update is not None:
+        st.session_state.user_frac_input = st.session_state.pending_frac_update
+        st.session_state.pending_frac_update = None
+    
     st.text_input("Type your final answer:", placeholder="e.g. 35.70 or 35/70", key="user_frac_input", on_change=format_fraction_input)
     user_answer = st.session_state.user_frac_input
     
@@ -325,7 +335,6 @@ else:
             else:
                 st.error("Please type two numbers separated by a symbol (like 35.70 or 35/70).")
         else:
-            # If the box is blank, trigger a local check fail so they can ask the AI
             st.session_state.local_checked = True
             st.session_state.is_correct = False
             st.session_state.ai_feedback = ""
@@ -376,7 +385,6 @@ else:
                             
                             resp_text = response.text.strip()
                             
-                            # Structured Parser
                             match = re.search(r'VERDICT:\s*(CORRECT|INCORRECT)\s*\nFOUND_FRACTION:\s*(.*?)\s*\nMESSAGE:\s*(.*)', resp_text, re.IGNORECASE | re.DOTALL)
                             
                             if match:
@@ -384,9 +392,9 @@ else:
                                 found_fraction = match.group(2).strip()
                                 message = match.group(3).strip()
                                 
-                                # Magic UI Update: If AI found a fraction, inject it into the text box
+                                # Send the fraction to the holding variable instead of the active widget key
                                 if found_fraction.upper() != "NONE" and re.match(r'^-?\d+/-?\d+$', found_fraction):
-                                    st.session_state.user_frac_input = found_fraction
+                                    st.session_state.pending_frac_update = found_fraction
                                 
                                 if verdict == "CORRECT":
                                     st.session_state.is_correct = True
@@ -395,7 +403,6 @@ else:
                                     st.session_state.ai_feedback = message
                                     st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                             else:
-                                # Fallback if AI hallucinates the format
                                 st.session_state.ai_feedback = resp_text
                                 st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                                 
