@@ -1,10 +1,27 @@
 import streamlit as st
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import random
 import math
+import io
 import re
+import base64
 from PIL import Image
 from google import genai
+
+# --- THE ULTIMATE MONKEY PATCH ---
+# Bypasses Streamlit's buggy media manager for background images
+import streamlit_drawable_canvas
+def b64_image_to_url(image, *args, **kwargs):
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return f"data:image/png;base64,{img_str}"
+
+streamlit_drawable_canvas.image_to_url = b64_image_to_url
 from streamlit_drawable_canvas import st_canvas
+# ---------------------------------
 
 # --- Math Engine: FRACTIONS ---
 def generate_fraction_problem():
@@ -30,32 +47,31 @@ def generate_fraction_problem():
     eq_str = f"{n1}/{denoms[0]} {op1} {n2}/{denoms[1]} {op2} {n3}/{denoms[2]}"
     return n1, denoms[0], op1, n2, denoms[1], op2, n3, denoms[2], eq_str, lcm
 
-# --- Visual Engine: NATIVE DIGITAL TEXT ---
-# No images used here, which means the browser will never block our export!
-def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
-    objects = []
-    y = 100 
+# --- Visual Engine: BACKEND MATPLOTLIB ---
+def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
+    fig, ax = plt.subplots(figsize=(3.5, 2.0), dpi=100) 
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis('off')
     
-    def add_fraction(n, d, x):
-        objects.extend([
-            {"type": "text", "text": str(n), "left": x, "top": y - 26, "fontSize": 28, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False},
-            {"type": "line", "x1": x - 15, "y1": y, "x2": x + 15, "y2": y, "stroke": "black", "strokeWidth": 3, "selectable": False, "evented": False},
-            {"type": "text", "text": str(d), "left": x, "top": y + 26, "fontSize": 28, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False}
-        ])
-        
-    def add_text(text, x):
-        objects.append({"type": "text", "text": text, "left": x, "top": y, "fontSize": 28, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False})
-        
-    add_fraction(n1, d1, 35)
-    add_text(op1, 80.5)
-    add_fraction(n2, d2, 126)
-    add_text(op2, 171.5)
-    add_fraction(n3, d3, 217)
-    add_text("=", 262.5)
+    fontsize = 28
     
-    objects.append({"type": "line", "x1": 285, "y1": y, "x2": 330, "y2": y, "stroke": "black", "strokeWidth": 3, "selectable": False, "evented": False})
+    ax.text(0.10, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
+    ax.text(0.23, 0.5, op1, fontsize=fontsize, ha='center', va='center')
+    ax.text(0.36, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
+    ax.text(0.49, 0.5, op2, fontsize=fontsize, ha='center', va='center')
+    ax.text(0.62, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
+    ax.text(0.75, 0.5, "=", fontsize=fontsize, ha='center', va='center')
     
-    return {"version": "4.4.0", "objects": objects}
+    ax.plot([0.814, 0.942], [0.5, 0.5], color='black', lw=2)
+    
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
+    plt.close(fig)
+    buf.seek(0)
+    
+    return Image.open(buf).convert('RGBA').copy()
 
 # --- State Management ---
 if 'generating' not in st.session_state:
@@ -72,7 +88,7 @@ if st.session_state.generating:
     with st.spinner("Generating problem..."):
         n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm = generate_fraction_problem()
         st.session_state.math_data = (eq_str, lcm)
-        st.session_state.fabric_state = generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3)
+        st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
@@ -81,32 +97,33 @@ if st.session_state.generating:
 else:
     eq_str, lcm = st.session_state.math_data
     
-    # Notice: No background_image! We are using a pure white background with native text on top.
+    # --- The Digital Canvas ---
+    # return_image_data=True explicitly overrides Streamlit's default behavior![cite: 1]
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3, 
         stroke_color="#1E90FF",
-        background_color="#ffffff", 
-        initial_drawing=st.session_state.fabric_state,
+        background_image=st.session_state.bg_image,
         update_streamlit=True,
         height=200,
         width=350,
         drawing_mode="freedraw",
+        return_image_data=True, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        
-        # We are back to the "Photograph" method. It grabs the exact visual state of the canvas!
         if canvas_result.image_data is not None:
             with st.spinner("The AI Tutor is checking your work..."):
                 try:
-                    # The image_data array natively contains both our black text and your blue ink
-                    final_canvas = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
+                    # Layer the transparent blue ink directly over the Matplotlib background[cite: 1]
+                    ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
+                    bg = st.session_state.bg_image.convert("RGBA")
                     
-                    # Ensure it has a crisp white background before sending to AI
-                    white_bg = Image.new("RGBA", final_canvas.size, "WHITE")
-                    final_canvas = Image.alpha_composite(white_bg, final_canvas).convert("RGB")
+                    if ink_img.size != bg.size:
+                        ink_img = ink_img.resize(bg.size, Image.Resampling.LANCZOS)
+                        
+                    final_canvas = Image.alpha_composite(bg, ink_img).convert("RGB")
                     
                     st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
                     
