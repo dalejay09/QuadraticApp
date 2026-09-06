@@ -35,31 +35,31 @@ def generate_fraction_problem():
     return n1, denoms[0], op1, n2, denoms[1], op2, n3, denoms[2], eq_str, lcm
 
 # --- Native Canvas Engine: TEXT & LINES ---
-# Builds the equation out of pure browser elements, completely avoiding CORS security blocks!
+# Coordinates explicitly scaled for a 350x200 mobile portrait layout
 def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
     objects = []
-    y = 150 # Vertical center of the 300px canvas
+    y = 100 # Vertical center of the 200px canvas
     
     def add_fraction(n, d, x):
         objects.extend([
-            {"type": "text", "text": str(n), "left": x, "top": y - 45, "fontSize": 60, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False},
-            {"type": "line", "x1": x - 30, "y1": y, "x2": x + 30, "y2": y, "stroke": "black", "strokeWidth": 6, "selectable": False, "evented": False},
-            {"type": "text", "text": str(d), "left": x, "top": y + 45, "fontSize": 60, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False}
+            {"type": "text", "text": str(n), "left": x, "top": y - 26, "fontSize": 28, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False},
+            {"type": "line", "x1": x - 15, "y1": y, "x2": x + 15, "y2": y, "stroke": "black", "strokeWidth": 3, "selectable": False, "evented": False},
+            {"type": "text", "text": str(d), "left": x, "top": y + 26, "fontSize": 28, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False}
         ])
         
     def add_text(text, x):
-        objects.append({"type": "text", "text": text, "left": x, "top": y, "fontSize": 60, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False})
+        objects.append({"type": "text", "text": text, "left": x, "top": y, "fontSize": 28, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False})
         
-    # Draw the equation elements spaced across the canvas
-    add_fraction(n1, d1, 100)
-    add_text(op1, 200)
-    add_fraction(n2, d2, 300)
-    add_text(op2, 400)
-    add_fraction(n3, d3, 500)
-    add_text("=", 600)
+    # Draw the equation elements perfectly spaced across a 350px width
+    add_fraction(n1, d1, 35)
+    add_text(op1, 80)
+    add_fraction(n2, d2, 125)
+    add_text(op2, 170)
+    add_fraction(n3, d3, 215)
+    add_text("=", 260)
     
-    # Draw the empty solution fraction line on the far right!
-    objects.append({"type": "line", "x1": 670, "y1": y, "x2": 770, "y2": y, "stroke": "black", "strokeWidth": 6, "selectable": False, "evented": False})
+    # Draw the empty solution fraction line on the far right
+    objects.append({"type": "line", "x1": 285, "y1": y, "x2": 330, "y2": y, "stroke": "black", "strokeWidth": 3, "selectable": False, "evented": False})
     
     return {"version": "4.4.0", "objects": objects}
 
@@ -89,16 +89,16 @@ if st.session_state.generating:
 else:
     eq_str, lcm = st.session_state.math_data
     
-    # The Drawing Canvas (No background image! Driven entirely by native text!)
+    # The Drawing Canvas locked to mobile portrait size
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
-        stroke_width=6, # Thicker blue ink to ensure the AI can distinguish it from the black text
+        stroke_width=3, 
         stroke_color="#1E90FF",
         background_color="#ffffff",
         initial_drawing=st.session_state.fabric_state,
         update_streamlit=True,
-        height=300,
-        width=800,
+        height=200,
+        width=350,
         drawing_mode="freedraw",
         key=f"canvas_{st.session_state.canvas_key}",
     )
@@ -123,7 +123,7 @@ else:
                     The Lowest Common Multiple for the denominators is {lcm}.
                     
                     I am sending you a single image of their digital workspace. 
-                    The student has written in thick BLUE ink directly over the top of the black printed fractions. 
+                    The student has written in BLUE ink directly over the top of the black printed fractions. 
                     They are using the blue ink to cross out denominators and write new equivalent fractions.
                     Their final answer is written in blue ink on the far right, over the blank horizontal line.
                     
