@@ -10,6 +10,7 @@ import base64
 from PIL import Image
 from itertools import combinations
 from google import genai
+import streamlit.components.v1 as components
 
 # --- THE ULTIMATE MONKEY PATCH ---
 import streamlit_drawable_canvas
@@ -214,6 +215,7 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
+        display_toolbar=False, 
         initial_drawing=st.session_state.active_initial_drawing, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
@@ -280,12 +282,26 @@ else:
 
     st.write("---")
     
-    # --- HYBRID NATIVE INPUT (Mobile Optimized) ---
-    user_answer = st.text_input("Type your final answer:", placeholder="e.g. 35/70")
+    # --- HYBRID NATIVE INPUT ---
+    user_answer = st.text_input("Type your final answer:", placeholder="e.g. 35.70 or 35/70")
+    
+    # --- JAVASCRIPT INJECTION: FORCE NUMERIC KEYPAD ---
+    components.html(
+        """
+        <script>
+        const inputs = window.parent.document.querySelectorAll('input[type="text"]');
+        inputs.forEach(input => {
+            input.setAttribute('inputmode', 'tel');
+        });
+        </script>
+        """,
+        height=0, width=0
+    )
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
         if user_answer:
-            match = re.match(r'^\s*(-?\d+)\s*/\s*(-?\d+)\s*$', user_answer)
+            # Forgiving Regex: Accepts ANY non-digit character(s) between the two numbers
+            match = re.match(r'^\s*(-?\d+)\s*[^\d]+\s*(-?\d+)\s*$', user_answer)
             if match:
                 user_num = int(match.group(1))
                 user_den = int(match.group(2))
@@ -299,12 +315,12 @@ else:
                     
                     if user_num * lcm == target_num * user_den:
                         st.session_state.is_correct = True
-                        st.session_state.ai_feedback = "🌟 **Awesome job!** Your math is absolutely perfect!"
+                        st.session_state.ai_feedback = f"🌟 **Awesome job!** Your math is absolutely perfect! (Read as {user_num}/{user_den})"
                     else:
                         st.session_state.is_correct = False
                         st.session_state.ai_feedback = ""
             else:
-                st.error("Please type your answer as a fraction using a slash (e.g., 35/70).")
+                st.error("Please type two numbers separated by a symbol (like 35.70 or 35/70).")
         else:
             st.error("Please type your final answer!")
 
@@ -313,7 +329,7 @@ else:
         if st.session_state.is_correct:
             st.success(st.session_state.ai_feedback)
         else:
-            st.warning("💡 **Almost there!** The final fraction isn't quite right.")
+            st.warning(f"💡 **Almost there!** We read your answer as {st.session_state.user_typed_num}/{st.session_state.user_typed_den}, but that isn't quite right.")
             
             if st.button("🤖 Ask AI Tutor to check my workings", use_container_width=True):
                 if canvas_result.image_data is not None:
