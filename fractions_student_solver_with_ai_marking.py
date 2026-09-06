@@ -1,35 +1,21 @@
 import streamlit as st
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import random
 import math
-import io
 import re
-import base64
-from PIL import Image, ImageDraw
+from PIL import Image
 from google import genai
-
-# --- THE ULTIMATE MONKEY PATCH ---
-# Bypasses Streamlit's buggy media manager for background images
-import streamlit_drawable_canvas
-def b64_image_to_url(image, *args, **kwargs):
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-    return f"data:image/png;base64,{img_str}"
-
-streamlit_drawable_canvas.image_to_url = b64_image_to_url
 from streamlit_drawable_canvas import st_canvas
-# ---------------------------------
 
 # --- Math Engine: FRACTIONS ---
 def generate_fraction_problem():
     while True:
+        # Pick 3 unique denominators between 2 and 10
         denoms = random.sample(range(2, 11), 3)
+        # Calculate Lowest Common Multiple
         lcm = math.lcm(math.lcm(denoms[0], denoms[1]), denoms[2])
         
         if lcm <= 100:
+            # Pick valid numerators
             n1 = random.randint(1, denoms[0] - 1)
             n2 = random.randint(1, denoms[1] - 1)
             n3 = random.randint(1, denoms[2] - 1)
@@ -37,6 +23,7 @@ def generate_fraction_problem():
             op1 = random.choice(['+', '-'])
             op2 = random.choice(['+', '-'])
             
+            # Ensure the final result isn't negative for a 9-year-old
             v1 = n1 / denoms[0]
             v2 = n2 / denoms[1] if op1 == '+' else -n2 / denoms[1]
             v3 = n3 / denoms[2] if op2 == '+' else -n3 / denoms[2]
@@ -47,68 +34,34 @@ def generate_fraction_problem():
     eq_str = f"{n1}/{denoms[0]} {op1} {n2}/{denoms[1]} {op2} {n3}/{denoms[2]}"
     return n1, denoms[0], op1, n2, denoms[1], op2, n3, denoms[2], eq_str, lcm
 
-# --- Visual Engine: 1:1 PORTRAIT EQUATION ---
-def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
-    fig, ax = plt.subplots(figsize=(3.5, 2.0), dpi=100) 
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis('off')
+# --- Native Canvas Engine: 350x200 PORTRAIT LAYOUT ---
+# We build the equation using pure browser elements. Zero CORS/Security errors!
+def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
+    objects = []
+    y = 100 # Vertical center of the 200px canvas
     
-    fontsize = 28
+    def add_fraction(n, d, x):
+        objects.extend([
+            {"type": "text", "text": str(n), "left": x, "top": y - 26, "fontSize": 28, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False},
+            {"type": "line", "x1": x - 15, "y1": y, "x2": x + 15, "y2": y, "stroke": "black", "strokeWidth": 3, "selectable": False, "evented": False},
+            {"type": "text", "text": str(d), "left": x, "top": y + 26, "fontSize": 28, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False}
+        ])
+        
+    def add_text(text, x):
+        objects.append({"type": "text", "text": text, "left": x, "top": y, "fontSize": 28, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False})
+        
+    # Draw the equation elements perfectly spaced across a 350px width
+    add_fraction(n1, d1, 35)
+    add_text(op1, 80)
+    add_fraction(n2, d2, 125)
+    add_text(op2, 170)
+    add_fraction(n3, d3, 215)
+    add_text("=", 260)
     
-    ax.text(0.10, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.23, 0.5, op1, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.36, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.49, 0.5, op2, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.62, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.75, 0.5, "=", fontsize=fontsize, ha='center', va='center')
+    # Draw the blank solution fraction line on the far right
+    objects.append({"type": "line", "x1": 285, "y1": y, "x2": 330, "y2": y, "stroke": "black", "strokeWidth": 3, "selectable": False, "evented": False})
     
-    ax.plot([0.83, 0.95], [0.5, 0.5], color='black', lw=2)
-    
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
-    plt.close(fig)
-    buf.seek(0)
-    
-    return Image.open(buf).convert('RGBA').copy()
-
-# --- BACKEND STROKE RENDERER (Pixel-Perfect Math Fix) ---
-def render_strokes_on_image(bg_image, json_data):
-    img = bg_image.copy()
-    draw = ImageDraw.Draw(img)
-    
-    if json_data and "objects" in json_data:
-        for obj in json_data["objects"]:
-            if obj.get("type") == "path":
-                path = obj.get("path", [])
-                stroke_color = obj.get("stroke", "#1E90FF")
-                stroke_width = int(obj.get("strokeWidth", 3))
-                
-                left = obj.get("left", 0)
-                top = obj.get("top", 0)
-                path_offset_x = obj.get("pathOffset", {}).get("x", 0)
-                path_offset_y = obj.get("pathOffset", {}).get("y", 0)
-                
-                origin_x = obj.get("originX", "left")
-                origin_y = obj.get("originY", "top")
-                
-                # Correctly calculate the absolute center of the stroke bounding box
-                center_x = left if origin_x == "center" else left + path_offset_x
-                center_y = top if origin_y == "center" else top + path_offset_y
-                
-                points = []
-                for cmd in path:
-                    if len(cmd) >= 3:
-                        # Add the relative points to the absolute center!
-                        x = cmd[-2] + center_x
-                        y = cmd[-1] + center_y
-                        points.append((x, y))
-                        
-                if len(points) > 1:
-                    draw.line(points, fill=stroke_color, width=stroke_width, joint="curve")
-                    
-    return img.convert("RGB")
+    return {"version": "4.4.0", "objects": objects}
 
 # --- State Management ---
 if 'generating' not in st.session_state:
@@ -126,7 +79,7 @@ if st.session_state.generating:
     with st.spinner("Generating problem..."):
         n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm = generate_fraction_problem()
         st.session_state.math_data = (eq_str, lcm)
-        st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
+        st.session_state.fabric_state = generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
@@ -135,11 +88,13 @@ if st.session_state.generating:
 else:
     eq_str, lcm = st.session_state.math_data
     
+    # The Drawing Canvas (Driven purely by native text objects, NO background image)
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3, 
         stroke_color="#1E90FF",
-        background_image=st.session_state.bg_image,
+        background_color="#ffffff", # Forces a clean white background
+        initial_drawing=st.session_state.fabric_state,
         update_streamlit=True,
         height=200,
         width=350,
@@ -148,18 +103,23 @@ else:
     )
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        if canvas_result.json_data is not None and len(canvas_result.json_data.get("objects", [])) > 0:
+        if canvas_result.image_data is not None:
             with st.spinner("The AI Tutor is checking your work..."):
                 try:
-                    final_canvas = render_strokes_on_image(st.session_state.bg_image, canvas_result.json_data)
+                    # The browser natively exported the black text + blue ink as one perfectly merged image!
+                    final_canvas = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
                     
-                    # You will now see your blue ink perfectly overlaid here!
+                    # Convert to RGB with a solid white background for the AI
+                    white_bg = Image.new("RGBA", final_canvas.size, "WHITE")
+                    final_canvas = Image.alpha_composite(white_bg, final_canvas).convert("RGB")
+                    
+                    # Display the exact image being sent to the AI for visual debugging
                     st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
                     
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     prompt = f"""
                     You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
-                    The problem they are solving is: {eq_str}. 
+                    The original problem they are solving is: {eq_str}. 
                     The Lowest Common Multiple for the denominators is {lcm}.
                     
                     I am sending you a single image of their digital workspace. 
