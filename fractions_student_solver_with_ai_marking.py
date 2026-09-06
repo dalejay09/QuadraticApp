@@ -86,7 +86,7 @@ def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return {"version": "4.4.0", "objects": objects}
 
-# --- THE FABRIC.JS SOURCE-CODE RENDERER ---
+# --- THE BARE-METAL ANCHOR PARSER ---
 def render_strokes_on_image(bg_image, json_data):
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
@@ -100,61 +100,35 @@ def render_strokes_on_image(bg_image, json_data):
             stroke_color = obj.get("stroke", "#1E90FF")
             stroke_width = int(obj.get("strokeWidth", 3))
             
-            # 1. Grab raw Fabric.js bounding box translations
-            left = obj.get("left", 0)
-            top = obj.get("top", 0)
-            scaleX = obj.get("scaleX", 1)
-            scaleY = obj.get("scaleY", 1)
-            width = obj.get("width", 0)
-            height = obj.get("height", 0)
-            pathOffset_x = obj.get("pathOffset", {}).get("x", 0)
-            pathOffset_y = obj.get("pathOffset", {}).get("y", 0)
+            # Secure coordinate casting
+            left = float(obj.get("left", 0))
+            top = float(obj.get("top", 0))
+            width = float(obj.get("width", 0))
+            height = float(obj.get("height", 0))
+            path_offset_x = float(obj.get("pathOffset", {}).get("x", 0))
+            path_offset_y = float(obj.get("pathOffset", {}).get("y", 0))
+            scaleX = float(obj.get("scaleX", 1))
+            scaleY = float(obj.get("scaleY", 1))
             
-            # 2. Calculate the exact visual center of the canvas stroke
-            cx = left + (width / 2 * scaleX) if obj.get("originX") != "center" else left
-            cy = top + (height / 2 * scaleY) if obj.get("originY") != "center" else top
-            
-            # 3. Flawless mathematical mapping to an absolute pixel
-            def map_pt(px, py):
-                return cx + scaleX * (px - pathOffset_x), cy + scaleY * (py - pathOffset_y)
+            # Determine absolute center of the stroke on the canvas
+            cx = left if obj.get("originX") == "center" else left + (width * scaleX) / 2
+            cy = top if obj.get("originY") == "center" else top + (height * scaleY) / 2
             
             points = []
-            current_pos = (0, 0)
-            
-            # 4. Reconstruct and bend the Bezier curves
             for cmd in path:
-                command = cmd[0]
-                nums = [float(v) for v in cmd[1:]]
+                # Blindly extract all numbers, completely ignoring case-sensitive SVG letters
+                nums = [float(val) for val in cmd if isinstance(val, (int, float)) or (isinstance(val, str) and val.replace('.','',1).lstrip('-').isdigit())]
                 
-                if command in ['M', 'L']:
-                    if len(nums) >= 2:
-                        current_pos = (nums[0], nums[1])
-                        points.append(map_pt(*current_pos))
-                        
-                elif command == 'Q':
-                    if len(nums) >= 4:
-                        cpx, cpy = nums[0], nums[1]
-                        x, y = nums[2], nums[3]
-                        for t_step in range(1, 11): 
-                            t = t_step / 10.0
-                            px = (1-t)**2 * current_pos[0] + 2*(1-t)*t * cpx + t**2 * x
-                            py = (1-t)**2 * current_pos[1] + 2*(1-t)*t * cpy + t**2 * y
-                            points.append(map_pt(px, py))
-                        current_pos = (x, y)
-                        
-                elif command == 'C':
-                    if len(nums) >= 6:
-                        cp1x, cp1y = nums[0], nums[1]
-                        cp2x, cp2y = nums[2], nums[3]
-                        x, y = nums[4], nums[5]
-                        for t_step in range(1, 11):
-                            t = t_step / 10.0
-                            px = (1-t)**3 * current_pos[0] + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * x
-                            py = (1-t)**3 * current_pos[1] + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * y
-                            points.append(map_pt(px, py))
-                        current_pos = (x, y)
-                        
-            # Draw the mapped line onto the backend image
+                if len(nums) >= 2:
+                    # The last two numbers in Fabric SVG arrays are ALWAYS the target X, Y anchor
+                    raw_x, raw_y = nums[-2], nums[-1]
+                    
+                    # Apply the flawless translation matrix
+                    abs_x = cx + scaleX * (raw_x - path_offset_x)
+                    abs_y = cy + scaleY * (raw_y - path_offset_y)
+                    
+                    points.append((abs_x, abs_y))
+                    
             if len(points) == 1:
                 r = (stroke_width * scaleX) / 2
                 draw.ellipse([points[0][0]-r, points[0][1]-r, points[0][0]+r, points[0][1]+r], fill=stroke_color)
