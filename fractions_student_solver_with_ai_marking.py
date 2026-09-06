@@ -304,8 +304,10 @@ if st.session_state.generating:
         st.session_state.color_index = 0 
         st.session_state.local_checked = False
         st.session_state.is_correct = False
+        
+        # SAFELY wipe the text box for the new problem
         st.session_state.user_frac_input = "" 
-        st.session_state.pending_frac_update = None
+        st.session_state.pending_frac_update = "" 
         
         st.session_state.stroke_history = [[]]
         st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
