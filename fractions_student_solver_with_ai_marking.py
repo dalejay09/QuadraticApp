@@ -123,7 +123,7 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return Image.open(buf).convert('RGBA').copy()
 
-# --- State Management ---
+# --- Memory Stack Initialization ---
 if 'generating' not in st.session_state:
     st.session_state.generating = True
 if 'ai_feedback' not in st.session_state:
@@ -132,10 +132,12 @@ if 'canvas_key' not in st.session_state:
     st.session_state.canvas_key = 0 
 if 'max_lcm' not in st.session_state:
     st.session_state.max_lcm = 100
-if 'starting_ink' not in st.session_state:
-    st.session_state.starting_ink = None
 if 'color_index' not in st.session_state:
     st.session_state.color_index = 0
+if 'stroke_history' not in st.session_state:
+    st.session_state.stroke_history = [[]]
+if 'active_initial_drawing' not in st.session_state:
+    st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -156,9 +158,13 @@ if st.session_state.generating:
         st.session_state.math_data = (eq_str, lcm)
         st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
-        st.session_state.starting_ink = None 
         st.session_state.color_index = 0 
+        
+        # Completely wipe the memory vault for a new problem
+        st.session_state.stroke_history = [[]]
+        st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
         st.session_state.canvas_key += 1 
+        
         st.session_state.generating = False
         st.rerun()
 
@@ -182,35 +188,31 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
-        initial_drawing=st.session_state.starting_ink,
+        initial_drawing=st.session_state.active_initial_drawing, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
-    # --- THE MAGIC ERASER INTERCEPT ---
-    if canvas_result.json_data and "objects" in canvas_result.json_data:
-        objects = canvas_result.json_data["objects"]
+    # --- THE MEMORY STACK & ERASER ENGINE ---
+    current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
+    last_saved_objects = st.session_state.stroke_history[-1]
+
+    # Only process if the browser successfully drew a brand NEW stroke
+    if len(current_objects) > len(last_saved_objects):
+        new_stroke = current_objects[-1]
         
-        # Check if the secret invisible eraser hex code was just drawn
-        eraser_indices = [i for i, obj in enumerate(objects) if obj.get("stroke", "").upper() == "#FFFFFE"]
-        
-        if eraser_indices:
-            # 1. Grab the most recent eraser tap
-            e_idx = eraser_indices[-1]
-            e_obj = objects[e_idx]
-            
-            # 2. Calculate the rough center point of the eraser smudge
+        if new_stroke.get("stroke", "").upper() == "#FFFFFE":
+            # Eraser Hit! Calculate the center point of the invisible smudge
+            e_obj = new_stroke
             ex = e_obj.get("left", 0) + (e_obj.get("width", 0) * e_obj.get("scaleX", 1)) / 2
             ey = e_obj.get("top", 0) + (e_obj.get("height", 0) * e_obj.get("scaleY", 1)) / 2
             
-            # 3. Delete the invisible eraser mark from memory
-            objects.pop(e_idx)
-            
-            # 4. Collision Engine: Scan remaining strokes to find the mathematically closest one
-            if objects:
+            objects_to_keep = last_saved_objects.copy()
+            if objects_to_keep:
                 min_dist = float('inf')
                 closest_idx = -1
                 
-                for i, obj in enumerate(objects):
+                # Collision Engine: Find the stroke mathematically closest to the smudge
+                for i, obj in enumerate(objects_to_keep):
                     ox = obj.get("left", 0) + (obj.get("width", 0) * obj.get("scaleX", 1)) / 2
                     oy = obj.get("top", 0) + (obj.get("height", 0) * obj.get("scaleY", 1)) / 2
                     dist = math.hypot(ex - ox, ey - oy)
@@ -218,32 +220,35 @@ else:
                     if dist < min_dist:
                         min_dist = dist
                         closest_idx = i
-                        
-                # 5. Destroy the target!
+                
                 if closest_idx != -1:
-                    objects.pop(closest_idx)
+                    objects_to_keep.pop(closest_idx)
             
-            # 6. Forcibly update the canvas memory and reload immediately
-            st.session_state.starting_ink = {"version": "4.4.0", "objects": objects}
+            # Save the post-deletion state to history and force a visual redraw
+            st.session_state.stroke_history.append(objects_to_keep)
+            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": objects_to_keep}
             st.session_state.canvas_key += 1
             st.rerun()
+            
         else:
-            # Continuously save the valid ink state so it survives generic button clicks
-            st.session_state.starting_ink = canvas_result.json_data
+            # Normal Pen! Silently save the snapshot to memory without forcing a flash
+            st.session_state.stroke_history.append(current_objects.copy())
 
     # --- CANVAS CONTROLS ---
     col_undo, col_clear = st.columns(2)
     with col_undo:
         if st.button("↩️ Undo Last", use_container_width=True):
-            if canvas_result.json_data and "objects" in canvas_result.json_data and len(canvas_result.json_data["objects"]) > 0:
-                modified_ink = canvas_result.json_data.copy()
-                modified_ink["objects"].pop()
-                st.session_state.starting_ink = modified_ink
+            if len(st.session_state.stroke_history) > 1:
+                # Throw away the latest state and revert to the previous snapshot
+                st.session_state.stroke_history.pop()
+                last_valid = st.session_state.stroke_history[-1]
+                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
                 st.session_state.canvas_key += 1
                 st.rerun()
     with col_clear:
         if st.button("🗑️ Clear All", use_container_width=True):
-            st.session_state.starting_ink = None
+            st.session_state.stroke_history = [[]]
+            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
             st.session_state.color_index = 0
             st.session_state.canvas_key += 1
             st.rerun()
@@ -251,8 +256,8 @@ else:
     st.write("---")
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        # We check starting_ink to ensure we have valid content (ignoring intercept flashes)
-        has_ink = st.session_state.starting_ink and "objects" in st.session_state.starting_ink and len(st.session_state.starting_ink["objects"]) > 0
+        
+        has_ink = len(st.session_state.stroke_history[-1]) > 0
         
         if has_ink and canvas_result.image_data is not None:
             with st.spinner("The AI Tutor is checking your work..."):
@@ -301,7 +306,6 @@ else:
                     else:
                         st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
                         
-                        # Cycle to the next pen color for corrections
                         st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                     
                     st.rerun()
