@@ -44,6 +44,7 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     
     fontsize = 28
     
+    # Mathematical mapping to exactly match the 350x200 frontend canvas
     ax.text(0.10, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
     ax.text(0.23, 0.5, op1, fontsize=fontsize, ha='center', va='center')
     ax.text(0.36, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
@@ -86,7 +87,7 @@ def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return {"version": "4.4.0", "objects": objects}
 
-# --- THE BULLETPROOF STROKE RENDERER ---
+# --- THE BARE-METAL STROKE RENDERER ---
 def render_strokes_on_image(bg_image, json_data):
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
@@ -95,31 +96,26 @@ def render_strokes_on_image(bg_image, json_data):
         return img.convert("RGB")
         
     for obj in json_data["objects"]:
-        # Scan for ANY object that contains a path array, completely ignoring Streamlit's arbitrary type labels
-        if "path" in obj and isinstance(obj["path"], list):
+        # Isolate only the blue freehand paths the user drew
+        if obj.get("type") == "path" and "path" in obj:
             path = obj["path"]
             stroke_color = obj.get("stroke", "#1E90FF")
             stroke_width = int(obj.get("strokeWidth", 3))
             
-            left = obj.get("left", 0)
-            top = obj.get("top", 0)
-            width = obj.get("width", 0)
-            height = obj.get("height", 0)
-            path_offset_x = obj.get("pathOffset", {}).get("x", 0)
-            path_offset_y = obj.get("pathOffset", {}).get("y", 0)
-            
-            center_x = left if obj.get("originX") == "center" else left + width / 2
-            center_y = top if obj.get("originY") == "center" else top + height / 2
-            
             points = []
             for cmd in path:
+                # The browser sends pure absolute canvas coordinates. We grab the x and y!
                 nums = [val for val in cmd if isinstance(val, (int, float))]
                 if len(nums) >= 2:
-                    x = center_x + (nums[-2] - path_offset_x)
-                    y = center_y + (nums[-1] - path_offset_y)
-                    points.append((x, y))
+                    points.append((nums[-2], nums[-1]))
                     
-            if len(points) > 1:
+            if len(points) == 1:
+                # Catch a tiny tap or dot
+                x, y = points[0]
+                r = stroke_width / 2
+                draw.ellipse([x - r, y - r, x + r, y + r], fill=stroke_color)
+            elif len(points) > 1:
+                # Draw the smooth curve natively
                 draw.line(points, fill=stroke_color, width=stroke_width, joint="curve")
                 
     return img.convert("RGB")
@@ -164,7 +160,6 @@ else:
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
         
-        # Absolute bypass. It skips all validation and goes directly to grading.
         with st.spinner("The AI Tutor is checking your work..."):
             try:
                 json_data = canvas_result.json_data if canvas_result else None
