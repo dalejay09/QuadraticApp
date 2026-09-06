@@ -318,7 +318,6 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
-        display_toolbar=False, 
         initial_drawing=st.session_state.active_initial_drawing, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
