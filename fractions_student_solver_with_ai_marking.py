@@ -34,13 +34,13 @@ def generate_fraction_problem():
         
     rand_val = random.random()
     if rand_val < 0.4:
-        variant = 1 # 40%: 3 unique denominators -> 4th LCM
+        variant = 1 
     elif rand_val < 0.6:
-        variant = 2 # 20%: 3 unique denominators -> One IS the LCM
+        variant = 2 
     elif rand_val < 0.8:
-        variant = 3 # 20%: 2 match the LCM, 1 is a factor
+        variant = 3 
     else:
-        variant = 4 # 20%: 1 is the LCM, 2 are matching factors
+        variant = 4 
         
     valid_combinations = []
     
@@ -67,7 +67,6 @@ def generate_fraction_problem():
                     if L != f and L % f == 0:
                         valid_combinations.append([L, f, f])
                         
-    # Fallback failsafe
     if not valid_combinations:
         valid_combinations = [[2, 3, 4]]
         
@@ -129,6 +128,8 @@ if 'canvas_key' not in st.session_state:
     st.session_state.canvas_key = 0 
 if 'max_lcm' not in st.session_state:
     st.session_state.max_lcm = 100
+if 'current_ink' not in st.session_state:
+    st.session_state.current_ink = None
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -148,6 +149,7 @@ if st.session_state.generating:
         st.session_state.math_data = (eq_str, lcm)
         st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
+        st.session_state.current_ink = None # Wipe the slate clean for the new problem
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
         st.rerun()
@@ -165,11 +167,35 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
+        initial_drawing=st.session_state.get('current_ink', None),
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
+    # Automatically save ink state as they draw
+    if canvas_result.json_data is not None:
+        st.session_state.current_ink = canvas_result.json_data
+
+    # --- CANVAS CONTROLS ---
+    col_undo, col_clear = st.columns(2)
+    with col_undo:
+        if st.button("↩️ Undo Last", use_container_width=True):
+            if st.session_state.current_ink and "objects" in st.session_state.current_ink and len(st.session_state.current_ink["objects"]) > 0:
+                st.session_state.current_ink["objects"].pop()
+                st.session_state.canvas_key += 1
+                st.rerun()
+    with col_clear:
+        if st.button("🗑️ Clear All", use_container_width=True):
+            st.session_state.current_ink = None
+            st.session_state.canvas_key += 1
+            st.rerun()
+
+    st.write("---")
+
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        if canvas_result.image_data is not None:
+        
+        has_ink = st.session_state.current_ink and "objects" in st.session_state.current_ink and len(st.session_state.current_ink["objects"]) > 0
+        
+        if has_ink and canvas_result.image_data is not None:
             with st.spinner("The AI Tutor is checking your work..."):
                 try:
                     ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
