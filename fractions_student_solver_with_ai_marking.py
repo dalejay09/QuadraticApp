@@ -44,7 +44,6 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     
     fontsize = 28
     
-    # Coordinates mathematically mapped to match the frontend Native Text layout
     ax.text(0.10, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
     ax.text(0.23, 0.5, op1, fontsize=fontsize, ha='center', va='center')
     ax.text(0.36, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
@@ -87,18 +86,21 @@ def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return {"version": "4.4.0", "objects": objects}
 
-# --- THE STROKE RENDERER (Reverse-Engineers the Bounding Box Math) ---
+# --- THE BULLETPROOF STROKE RENDERER ---
 def render_strokes_on_image(bg_image, json_data):
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
     
+    if not json_data or "objects" not in json_data:
+        return img.convert("RGB")
+        
     for obj in json_data["objects"]:
-        if obj.get("type") == "path":
-            path = obj.get("path", [])
+        # Scan for ANY object that contains a path array (ignoring labels)
+        if "path" in obj and isinstance(obj["path"], list):
+            path = obj["path"]
             stroke_color = obj.get("stroke", "#1E90FF")
             stroke_width = int(obj.get("strokeWidth", 3))
             
-            # The Fabric.js offset formula
             left = obj.get("left", 0)
             top = obj.get("top", 0)
             path_offset_x = obj.get("pathOffset", {}).get("x", 0)
@@ -106,11 +108,13 @@ def render_strokes_on_image(bg_image, json_data):
             
             points = []
             for cmd in path:
-                if cmd[0] in ['M', 'L', 'Q', 'C']:
-                    # Reconstruct absolute coordinates
-                    abs_x = cmd[-2] - path_offset_x + left
-                    abs_y = cmd[-1] - path_offset_y + top
-                    points.append((abs_x, abs_y))
+                # Extract any raw numerical coordinates, ignoring the Fabric letter commands
+                nums = [val for val in cmd if isinstance(val, (int, float))]
+                if len(nums) >= 2:
+                    # Apply the bounding box offset math to find the absolute pixel
+                    x = nums[-2] - path_offset_x + left
+                    y = nums[-1] - path_offset_y + top
+                    points.append((x, y))
                     
             if len(points) > 1:
                 draw.line(points, fill=stroke_color, width=stroke_width, joint="curve")
@@ -156,60 +160,48 @@ else:
     )
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        
-        # We explicitly verify ink exists by looking at the JSON data.
-        # .image_data is NEVER called.
-        has_ink = False
-        if canvas_result.json_data is not None and "objects" in canvas_result.json_data:
-            for obj in canvas_result.json_data["objects"]:
-                if obj.get("type") == "path":
-                    has_ink = True
-                    break
-                    
-        if has_ink:
-            with st.spinner("The AI Tutor is checking your work..."):
-                try:
-                    final_canvas = render_strokes_on_image(st.session_state.bg_image, canvas_result.json_data)
-                    
-                    # You will see your ink perfectly aligned here!
-                    st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
-                    
-                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                    prompt = f"""
-                    You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
-                    The problem they are solving is: {eq_str}. 
-                    The Lowest Common Multiple for the denominators is {lcm}.
-                    
-                    I am sending you a single image of their digital workspace. 
-                    The black printed fractions are the original problem. The BLUE ink is their handwriting.
-                    The student is writing in blue ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
-                    Their final answer is written in blue ink on the far right, over the black horizontal line.
-                    
-                    IMPORTANT GRADING RULES:
-                    1. First, silently calculate the correct final numerator and denominator yourself.
-                    2. Read their blue ink to see if they converted the original fractions correctly. (Note: If a fraction already has the lowest common denominator, they may leave it completely unmarked. This is correct logic! Do not penalize them.)
-                    3. Check their final answer on the right. It does not need to be simplified.
-                    
-                    If their final math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
-                    If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong without giving them the final answer. Keep your tone highly supportive.
-                    """
-                    
-                    response = client.models.generate_content(
-                        model='gemini-3.6-flash',
-                        contents=[prompt, final_canvas]
-                    )
-                    
-                    resp_text = response.text.strip()
-                    if resp_text.upper().startswith("CORRECT"):
-                        st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
-                    else:
-                        st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
-                    
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Oops! The tutor had a glitch: {e}")
-        else:
-            st.error("Please draw your working on the canvas before checking your answer!")
+        with st.spinner("The AI Tutor is checking your work..."):
+            try:
+                # Go straight to rendering. If they didn't draw ink, it sends the blank math!
+                final_canvas = render_strokes_on_image(st.session_state.bg_image, canvas_result.json_data if canvas_result else None)
+                
+                # Show the user exactly what Python rendered
+                st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
+                
+                client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                prompt = f"""
+                You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
+                The problem they are solving is: {eq_str}. 
+                The Lowest Common Multiple for the denominators is {lcm}.
+                
+                I am sending you a single image of their digital workspace. 
+                The black printed fractions are the original problem. The BLUE ink is their handwriting.
+                The student is writing in blue ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
+                Their final answer is written in blue ink on the far right, over the black horizontal line.
+                
+                IMPORTANT GRADING RULES:
+                1. First, silently calculate the correct final numerator and denominator yourself.
+                2. Read their blue ink to see if they converted the original fractions correctly. (Note: If a fraction already has the lowest common denominator, they may leave it completely unmarked. This is correct logic! Do not penalize them.)
+                3. Check their final answer on the right. It does not need to be simplified.
+                
+                If their final math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
+                If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong without giving them the final answer. Keep your tone highly supportive.
+                """
+                
+                response = client.models.generate_content(
+                    model='gemini-3.6-flash',
+                    contents=[prompt, final_canvas]
+                )
+                
+                resp_text = response.text.strip()
+                if resp_text.upper().startswith("CORRECT"):
+                    st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
+                else:
+                    st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
+                
+                st.rerun()
+            except Exception as e:
+                st.error(f"Oops! The tutor had a glitch: {e}")
 
     if st.session_state.ai_feedback:
         st.info(st.session_state.ai_feedback)
