@@ -128,8 +128,8 @@ if 'canvas_key' not in st.session_state:
     st.session_state.canvas_key = 0 
 if 'max_lcm' not in st.session_state:
     st.session_state.max_lcm = 100
-if 'current_ink' not in st.session_state:
-    st.session_state.current_ink = None
+if 'starting_ink' not in st.session_state:
+    st.session_state.starting_ink = None
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -149,7 +149,7 @@ if st.session_state.generating:
         st.session_state.math_data = (eq_str, lcm)
         st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
-        st.session_state.current_ink = None # Wipe the slate clean for the new problem
+        st.session_state.starting_ink = None # Wipe the slate clean for the new problem
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
         st.rerun()
@@ -167,25 +167,23 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
-        initial_drawing=st.session_state.get('current_ink', None),
+        initial_drawing=st.session_state.starting_ink, # Only updates when explicitly commanded
         key=f"canvas_{st.session_state.canvas_key}",
     )
-
-    # Automatically save ink state as they draw
-    if canvas_result.json_data is not None:
-        st.session_state.current_ink = canvas_result.json_data
 
     # --- CANVAS CONTROLS ---
     col_undo, col_clear = st.columns(2)
     with col_undo:
         if st.button("↩️ Undo Last", use_container_width=True):
-            if st.session_state.current_ink and "objects" in st.session_state.current_ink and len(st.session_state.current_ink["objects"]) > 0:
-                st.session_state.current_ink["objects"].pop()
+            if canvas_result.json_data and "objects" in canvas_result.json_data and len(canvas_result.json_data["objects"]) > 0:
+                modified_ink = canvas_result.json_data.copy()
+                modified_ink["objects"].pop()
+                st.session_state.starting_ink = modified_ink
                 st.session_state.canvas_key += 1
                 st.rerun()
     with col_clear:
         if st.button("🗑️ Clear All", use_container_width=True):
-            st.session_state.current_ink = None
+            st.session_state.starting_ink = None
             st.session_state.canvas_key += 1
             st.rerun()
 
@@ -193,7 +191,7 @@ else:
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
         
-        has_ink = st.session_state.current_ink and "objects" in st.session_state.current_ink and len(st.session_state.current_ink["objects"]) > 0
+        has_ink = canvas_result.json_data and "objects" in canvas_result.json_data and len(canvas_result.json_data["objects"]) > 0
         
         if has_ink and canvas_result.image_data is not None:
             with st.spinner("The AI Tutor is checking your work..."):
