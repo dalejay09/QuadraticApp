@@ -23,6 +23,10 @@ streamlit_drawable_canvas.image_to_url = b64_image_to_url
 from streamlit_drawable_canvas import st_canvas
 # ---------------------------------
 
+# --- Configuration ---
+PEN_COLORS = ["#1E90FF", "#FF2400", "#32CD32", "#9400D3", "#FF8C00"]
+COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
+
 # --- Math Engine: FRACTIONS ---
 def generate_fraction_problem():
     max_lcm = st.session_state.get('max_lcm', 100)
@@ -130,6 +134,8 @@ if 'max_lcm' not in st.session_state:
     st.session_state.max_lcm = 100
 if 'starting_ink' not in st.session_state:
     st.session_state.starting_ink = None
+if 'color_index' not in st.session_state:
+    st.session_state.color_index = 0
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -141,7 +147,10 @@ with col2:
     with st.popover("⚙️", use_container_width=True):
         st.radio("Max LCM Limit", [50, 100, 200], key="max_lcm", on_change=handle_settings_change)
 
-st.write("Write right over the text to cross out denominators, then put your answer at the end!")
+current_color_hex = PEN_COLORS[st.session_state.color_index]
+current_color_name = COLOR_NAMES[st.session_state.color_index]
+
+st.write(f"Write right over the text to cross out denominators. You are currently using the **{current_color_name}** pen.")
 
 if st.session_state.generating:
     with st.spinner("Generating problem..."):
@@ -149,7 +158,8 @@ if st.session_state.generating:
         st.session_state.math_data = (eq_str, lcm)
         st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
-        st.session_state.starting_ink = None # Wipe the slate clean for the new problem
+        st.session_state.starting_ink = None 
+        st.session_state.color_index = 0 # Reset pen to blue for new problems
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
         st.rerun()
@@ -160,14 +170,14 @@ else:
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3, 
-        stroke_color="#1E90FF",
+        stroke_color=current_color_hex,
         background_image=st.session_state.bg_image,
         update_streamlit=True,
         height=200,
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
-        initial_drawing=st.session_state.starting_ink, # Only updates when explicitly commanded
+        initial_drawing=st.session_state.starting_ink,
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
@@ -184,13 +194,13 @@ else:
     with col_clear:
         if st.button("🗑️ Clear All", use_container_width=True):
             st.session_state.starting_ink = None
+            st.session_state.color_index = 0
             st.session_state.canvas_key += 1
             st.rerun()
 
     st.write("---")
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        
         has_ink = canvas_result.json_data and "objects" in canvas_result.json_data and len(canvas_result.json_data["objects"]) > 0
         
         if has_ink and canvas_result.image_data is not None:
@@ -207,23 +217,26 @@ else:
                     st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
                     
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                    
+                    # Dynamically inject the active color into the grading instructions
                     prompt = f"""
                     You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
                     The problem they are solving is: {eq_str}. 
                     The Lowest Common Multiple for the denominators is {lcm}.
                     
                     I am sending you a single image of their digital workspace. 
-                    The black printed fractions are the original problem. The BLUE ink is their handwriting.
-                    The student is writing in blue ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
-                    Their final answer is written in blue ink on the far right, over the black horizontal line.
+                    The black printed fractions are the original problem. 
+                    The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions.
+                    Their final answer is written on the far right, over the black horizontal line.
                     
                     IMPORTANT GRADING RULES:
                     1. First, silently calculate the correct final numerator and denominator yourself.
-                    2. Read their blue ink to see if they converted the original fractions correctly.
+                    2. Read their handwritten ink to see if they converted the original fractions correctly.
                     3. SPECIAL RULE: If a fraction already has the lowest common denominator, the student may leave it completely unmarked. This is correct logic! Do not tell them they missed a step or forgot to mark it.
                     4. Check their final answer on the right. It does not need to be simplified.
+                    5. COLOR RULE: The student may have tried this problem multiple times. Their LATEST attempt is written in {current_color_name} ink. You must evaluate their logic based primarily on the {current_color_name} handwriting, treating other colors as older, crossed-out mistakes.
                     
-                    If their final math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
+                    If their final {current_color_name} math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
                     If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong without giving them the final answer. Keep your tone highly supportive.
                     """
                     
@@ -237,6 +250,10 @@ else:
                         st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
                     else:
                         st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '💡 **Almost there!** ', resp_text)
+                        
+                        # Cycle to the next pen color so they can correct their mistake directly over the old ink
+                        st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
+                        st.session_state.starting_ink = canvas_result.json_data # Save the old ink state
                     
                     st.rerun()
                 except Exception as e:
