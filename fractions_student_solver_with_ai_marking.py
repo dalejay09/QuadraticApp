@@ -86,7 +86,7 @@ def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return {"version": "4.4.0", "objects": objects}
 
-# --- THE BULLETPROOF STROKE RENDERER ---
+# --- THE BULLETPROOF BEZIER CURVE RENDERER ---
 def render_strokes_on_image(bg_image, json_data):
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
@@ -100,32 +100,47 @@ def render_strokes_on_image(bg_image, json_data):
             stroke_color = obj.get("stroke", "#1E90FF")
             stroke_width = int(obj.get("strokeWidth", 3))
             
-            # Extract the offset coordinates of the stroke's bounding box center
-            path_offset_x = obj.get("pathOffset", {}).get("x", 0)
-            path_offset_y = obj.get("pathOffset", {}).get("y", 0)
-            
-            left = obj.get("left", 0)
-            top = obj.get("top", 0)
-            
-            originX = obj.get("originX", "left")
-            originY = obj.get("originY", "top")
-            
-            # Calculate the true absolute center translation of the stroke
-            tx = left + path_offset_x if originX == "left" else left
-            ty = top + path_offset_y if originY == "top" else top
-            
             points = []
+            current_pos = (0, 0)
+            
+            # Flawless interpolation of absolute SVG/Fabric paths
             for cmd in path:
-                # Extract every micro-coordinate from the Bezier curve commands
-                nums = [val for val in cmd if isinstance(val, (int, float))]
-                for i in range(0, len(nums), 2):
-                    if i + 1 < len(nums):
-                        px, py = nums[i], nums[i+1]
-                        # Add the relative point to the absolute center translation
-                        points.append((tx + px, ty + py))
+                command = cmd[0]
+                nums = [float(v) for v in cmd[1:]]
+                
+                if command in ['M', 'L']:
+                    if len(nums) >= 2:
+                        current_pos = (nums[0], nums[1])
+                        points.append(current_pos)
                         
-            if len(points) > 1:
-                # Draw the smooth curve organically using all control points
+                elif command == 'Q': # Quadratic Bezier
+                    if len(nums) >= 4:
+                        cpx, cpy = nums[0], nums[1]
+                        x, y = nums[2], nums[3]
+                        # Interpolate the curve mathematically to preserve handwriting loops
+                        for t_step in range(1, 6):
+                            t = t_step / 5.0
+                            px = (1-t)**2 * current_pos[0] + 2*(1-t)*t * cpx + t**2 * x
+                            py = (1-t)**2 * current_pos[1] + 2*(1-t)*t * cpy + t**2 * y
+                            points.append((px, py))
+                        current_pos = (x, y)
+                        
+                elif command == 'C': # Cubic Bezier
+                    if len(nums) >= 6:
+                        cp1x, cp1y = nums[0], nums[1]
+                        cp2x, cp2y = nums[2], nums[3]
+                        x, y = nums[4], nums[5]
+                        for t_step in range(1, 6):
+                            t = t_step / 5.0
+                            px = (1-t)**3 * current_pos[0] + 3*(1-t)**2*t * cp1x + 3*(1-t)*t**2 * cp2x + t**3 * x
+                            py = (1-t)**3 * current_pos[1] + 3*(1-t)**2*t * cp1y + 3*(1-t)*t**2 * cp2y + t**3 * y
+                            points.append((px, py))
+                        current_pos = (x, y)
+                        
+            if len(points) == 1:
+                r = stroke_width / 2
+                draw.ellipse([points[0][0]-r, points[0][1]-r, points[0][0]+r, points[0][1]+r], fill=stroke_color)
+            elif len(points) > 1:
                 draw.line(points, fill=stroke_color, width=stroke_width, joint="curve")
                 
     return img.convert("RGB")
