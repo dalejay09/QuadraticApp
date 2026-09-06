@@ -116,7 +116,6 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     ax.text(0.62, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
     ax.text(0.75, 0.5, "=", fontsize=fontsize, ha='center', va='center')
     
-    # Restored the blank answer line so students can still scribble their answer!
     ax.plot([0.814, 0.942], [0.5, 0.5], color='black', lw=2)
     
     buf = io.BytesIO()
@@ -125,29 +124,6 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     buf.seek(0)
     
     return Image.open(buf).convert('RGBA').copy()
-
-# --- Custom CSS for Compact UI ---
-st.markdown("""
-    <style>
-    /* Strip the up/down arrows from number inputs */
-    input[type="number"]::-webkit-inner-spin-button, 
-    input[type="number"]::-webkit-outer-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-    }
-    input[type="number"] {
-        -moz-appearance: textfield;
-        text-align: center;
-        font-size: 1.2rem !important;
-        font-weight: bold;
-    }
-    /* Squish the padding on the tool radio buttons */
-    div.row-widget.stRadio > div {
-        flex-direction: row;
-        gap: 10px;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
 # --- Memory Stack Initialization ---
 if 'generating' not in st.session_state:
@@ -168,6 +144,10 @@ if 'local_checked' not in st.session_state:
     st.session_state.local_checked = False
 if 'is_correct' not in st.session_state:
     st.session_state.is_correct = False
+if 'user_typed_num' not in st.session_state:
+    st.session_state.user_typed_num = 0
+if 'user_typed_den' not in st.session_state:
+    st.session_state.user_typed_den = 1
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -204,8 +184,6 @@ else:
     
     st.write(f"Cross out the denominators! Current pen: **{current_color_name}**")
 
-    # --- THE DIGITAL CANVAS ---
-    # We must retrieve tool state from session_state immediately to dictate canvas config
     active_tool = st.session_state.get("tool_selector", "🖌️ Pen")
     active_stroke_color = current_color_hex if active_tool == "🖌️ Pen" else "#FFFFFE"
     active_stroke_width = 3 if active_tool == "🖌️ Pen" else 15
@@ -250,7 +228,6 @@ else:
 
     if len(current_objects) > len(last_saved_objects):
         new_stroke = current_objects[-1]
-        
         if new_stroke.get("stroke", "").upper() == "#FFFFFE":
             e_obj = new_stroke
             ew = e_obj.get("width", 0) * e_obj.get("scaleX", 1)
@@ -265,7 +242,6 @@ else:
             E_B = e_top + eh + pad
             
             objects_to_keep = []
-            
             for obj in last_saved_objects:
                 ow = obj.get("width", 0) * obj.get("scaleX", 1)
                 oh = obj.get("height", 0) * obj.get("scaleY", 1)
@@ -285,36 +261,39 @@ else:
             st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": objects_to_keep}
             st.session_state.canvas_key += 1
             st.rerun()
-            
         else:
             st.session_state.stroke_history.append(current_objects.copy())
 
-
     st.write("---")
     
-    # --- COMPACT INLINE INPUT ROW ---
-    col_lbl, col_n, col_slash, col_d, col_btn = st.columns([1.5, 2, 0.5, 2, 3])
-    with col_lbl:
-        st.markdown("<div style='margin-top:7px; font-weight:bold;'>Answer:</div>", unsafe_allow_html=True)
-    with col_n:
-        user_num = st.number_input("Num", step=1, value=None, label_visibility="collapsed", placeholder="___")
-    with col_slash:
-        st.markdown("<h3 style='text-align:center; margin:0; padding-top:2px;'>/</h3>", unsafe_allow_html=True)
-    with col_d:
-        user_den = st.number_input("Den", step=1, value=None, label_visibility="collapsed", placeholder="___")
-    with col_btn:
-        if st.button("Check!", type="primary", use_container_width=True):
-            if user_num is not None and user_den is not None and user_den != 0:
-                st.session_state.local_checked = True
+    # --- HYBRID NATIVE INPUT (Mobile Optimized) ---
+    user_answer = st.text_input("Type your final answer:", placeholder="e.g. 35/70")
+
+    if st.button("Check My Answer!", type="primary", use_container_width=True):
+        if user_answer:
+            # Parse the input using regex to split by the slash (handles spaces perfectly)
+            match = re.match(r'^\s*(-?\d+)\s*/\s*(-?\d+)\s*$', user_answer)
+            if match:
+                user_num = int(match.group(1))
+                user_den = int(match.group(2))
                 
-                if user_num * lcm == target_num * user_den:
-                    st.session_state.is_correct = True
-                    st.session_state.ai_feedback = "🌟 **Awesome job!** Your math is absolutely perfect!"
+                if user_den == 0:
+                    st.error("Denominator cannot be zero!")
                 else:
-                    st.session_state.is_correct = False
-                    st.session_state.ai_feedback = ""
+                    st.session_state.local_checked = True
+                    st.session_state.user_typed_num = user_num
+                    st.session_state.user_typed_den = user_den
+                    
+                    if user_num * lcm == target_num * user_den:
+                        st.session_state.is_correct = True
+                        st.session_state.ai_feedback = "🌟 **Awesome job!** Your math is absolutely perfect!"
+                    else:
+                        st.session_state.is_correct = False
+                        st.session_state.ai_feedback = ""
             else:
-                st.error("Please type your final numerator and denominator!")
+                st.error("Please type your answer as a fraction using a slash (e.g., 35/70).")
+        else:
+            st.error("Please type your final answer!")
 
     # --- AI DIAGNOSTICS ---
     if st.session_state.local_checked:
@@ -339,13 +318,13 @@ else:
                             You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
                             The problem is: {eq_str}. 
                             
-                            The student typed their final answer as {user_num}/{user_den}. This is INCORRECT.
+                            The student typed their final answer as {st.session_state.user_typed_num}/{st.session_state.user_typed_den}. This is INCORRECT.
                             
                             I am sending you an image of their digital workspace. 
                             The student is writing in ink directly over the top of the black fractions to cross out denominators and write new equivalent fractions. They may have also scribbled their final answer on the right side of the canvas over the horizontal line.
                             
                             IMPORTANT GRADING RULES:
-                            1. Read their handwritten ink to figure out WHERE they went wrong before they typed {user_num}/{user_den}. 
+                            1. Read their handwritten ink to figure out WHERE they went wrong before they typed {st.session_state.user_typed_num}/{st.session_state.user_typed_den}. 
                             2. Did they convert the denominators incorrectly? Did they mess up the addition/subtraction on top?
                             3. The LATEST attempt is written in {current_color_name} ink. Treat other colors as older mistakes.
                             
