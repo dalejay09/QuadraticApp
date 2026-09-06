@@ -361,7 +361,7 @@ else:
     st.write("Mark up the table below (using your finger/mouse) to find the differences or multiplier.")
     
     # --- The Digital Canvas ---
-    # We are back to using background_image, fed by our new monkey patch!
+    # return_image_data is explicitly set to True!
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=3,
@@ -371,6 +371,7 @@ else:
         height=400,
         width=600,
         drawing_mode="freedraw",
+        return_image_data=True,
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
