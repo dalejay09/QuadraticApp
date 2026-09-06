@@ -115,7 +115,6 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     ax.text(0.49, 0.5, op2, fontsize=fontsize, ha='center', va='center')
     ax.text(0.62, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
     ax.text(0.75, 0.5, "=", fontsize=fontsize, ha='center', va='center')
-    
     ax.plot([0.814, 0.942], [0.5, 0.5], color='black', lw=2)
     
     buf = io.BytesIO()
@@ -133,9 +132,9 @@ st.markdown("""
         font-size: 1.2rem !important;
         font-weight: bold;
     }
-    div.row-widget.stRadio > div {
-        flex-direction: row;
-        gap: 10px;
+    /* Toolbar Button Styling */
+    .stButton > button {
+        padding: 0.2rem 0.5rem;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -163,6 +162,8 @@ if 'user_typed_num' not in st.session_state:
     st.session_state.user_typed_num = 0
 if 'user_typed_den' not in st.session_state:
     st.session_state.user_typed_den = 1
+if 'active_tool' not in st.session_state:
+    st.session_state.active_tool = "Pen"
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -186,6 +187,7 @@ if st.session_state.generating:
         st.session_state.color_index = 0 
         st.session_state.local_checked = False
         st.session_state.is_correct = False
+        st.session_state.active_tool = "Pen"
         
         st.session_state.stroke_history = [[]]
         st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
@@ -199,10 +201,36 @@ else:
     
     st.write(f"Cross out the denominators! Current pen: **{current_color_name}**")
 
-    active_tool = st.session_state.get("tool_selector", "🖌️ Pen")
-    active_stroke_color = current_color_hex if active_tool == "🖌️ Pen" else "#FFFFFE"
-    active_stroke_width = 3 if active_tool == "🖌️ Pen" else 15
+    # --- PERMANENT CUSTOM TOOLBAR ---
+    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+    with t_col1:
+        if st.button("🖌️ Pen", type="primary" if st.session_state.active_tool == "Pen" else "secondary", use_container_width=True):
+            st.session_state.active_tool = "Pen"
+            st.rerun()
+    with t_col2:
+        if st.button("🧽 Eraser", type="primary" if st.session_state.active_tool == "Eraser" else "secondary", use_container_width=True):
+            st.session_state.active_tool = "Eraser"
+            st.rerun()
+    with t_col3:
+        if st.button("↩️ Undo", use_container_width=True):
+            if len(st.session_state.stroke_history) > 1:
+                st.session_state.stroke_history.pop()
+                last_valid = st.session_state.stroke_history[-1]
+                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
+                st.session_state.canvas_key += 1
+                st.rerun()
+    with t_col4:
+        if st.button("🗑️ Clear", use_container_width=True):
+            st.session_state.stroke_history = [[]]
+            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
+            st.session_state.color_index = 0
+            st.session_state.canvas_key += 1
+            st.rerun()
 
+    active_stroke_color = current_color_hex if st.session_state.active_tool == "Pen" else "#FFFFFE"
+    active_stroke_width = 3 if st.session_state.active_tool == "Pen" else 15
+
+    # --- THE DIGITAL CANVAS ---
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
         stroke_width=active_stroke_width, 
@@ -213,29 +241,10 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
+        display_toolbar=False, # We disabled the native javascript toolbar here!
         initial_drawing=st.session_state.active_initial_drawing, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
-
-    # --- COMPACT TOOLBAR ROW ---
-    col_t, col_u, col_c = st.columns([2.5, 1.2, 1.2])
-    with col_t:
-        st.radio("Tool", ["🖌️ Pen", "🧽 Eraser"], horizontal=True, label_visibility="collapsed", key="tool_selector")
-    with col_u:
-        if st.button("↩️ Undo", use_container_width=True):
-            if len(st.session_state.stroke_history) > 1:
-                st.session_state.stroke_history.pop()
-                last_valid = st.session_state.stroke_history[-1]
-                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
-                st.session_state.canvas_key += 1
-                st.rerun()
-    with col_c:
-        if st.button("🗑️ Clear", use_container_width=True):
-            st.session_state.stroke_history = [[]]
-            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
-            st.session_state.color_index = 0
-            st.session_state.canvas_key += 1
-            st.rerun()
 
     # --- THE BOUNDING BOX COLLISION ENGINE ---
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
@@ -351,7 +360,6 @@ else:
                             
                             resp_text = response.text.strip()
                             
-                            # Catch the override!
                             if resp_text.upper().startswith("CORRECT"):
                                 st.session_state.is_correct = True
                                 st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '🌟 **Awesome job!** ', resp_text)
