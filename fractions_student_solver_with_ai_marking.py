@@ -226,7 +226,6 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
-        display_toolbar=False, 
         initial_drawing=st.session_state.active_initial_drawing, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
@@ -292,7 +291,6 @@ else:
     st.write("---")
     
     # --- MAGIC UI INTERCEPT ---
-    # Apply the AI's found fraction before the text box renders to prevent Streamlit State crashing
     if st.session_state.pending_frac_update is not None:
         st.session_state.user_frac_input = st.session_state.pending_frac_update
         st.session_state.pending_frac_update = None
@@ -392,7 +390,6 @@ else:
                                 found_fraction = match.group(2).strip()
                                 message = match.group(3).strip()
                                 
-                                # Send the fraction to the holding variable instead of the active widget key
                                 if found_fraction.upper() != "NONE" and re.match(r'^-?\d+/-?\d+$', found_fraction):
                                     st.session_state.pending_frac_update = found_fraction
                                 
