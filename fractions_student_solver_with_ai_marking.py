@@ -1,27 +1,10 @@
 import streamlit as st
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import random
 import math
-import io
 import re
-import base64
-from PIL import Image, ImageDraw
+from PIL import Image
 from google import genai
-
-# --- THE ULTIMATE MONKEY PATCH ---
-# Bypasses Streamlit's buggy media manager for background images
-import streamlit_drawable_canvas
-def b64_image_to_url(image, *args, **kwargs):
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-    return f"data:image/png;base64,{img_str}"
-
-streamlit_drawable_canvas.image_to_url = b64_image_to_url
 from streamlit_drawable_canvas import st_canvas
-# ---------------------------------
 
 # --- Math Engine: FRACTIONS ---
 def generate_fraction_problem():
@@ -51,56 +34,34 @@ def generate_fraction_problem():
     eq_str = f"{n1}/{denoms[0]} {op1} {n2}/{denoms[1]} {op2} {n3}/{denoms[2]}"
     return n1, denoms[0], op1, n2, denoms[1], op2, n3, denoms[2], eq_str, lcm
 
-# --- Visual Engine: COMPRESSED PORTRAIT EQUATION ---
-def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
-    # Compressed 7:4 aspect ratio tailored perfectly for mobile portrait mode
-    fig, ax = plt.subplots(figsize=(7, 4), dpi=100) 
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis('off')
+# --- Native Canvas Engine: TEXT & LINES ---
+# Builds the equation out of pure browser elements, completely avoiding CORS security blocks!
+def generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3):
+    objects = []
+    y = 150 # Vertical center of the 300px canvas
     
-    fontsize = 50
+    def add_fraction(n, d, x):
+        objects.extend([
+            {"type": "text", "text": str(n), "left": x, "top": y - 45, "fontSize": 60, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False},
+            {"type": "line", "x1": x - 30, "y1": y, "x2": x + 30, "y2": y, "stroke": "black", "strokeWidth": 6, "selectable": False, "evented": False},
+            {"type": "text", "text": str(d), "left": x, "top": y + 45, "fontSize": 60, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False}
+        ])
+        
+    def add_text(text, x):
+        objects.append({"type": "text", "text": text, "left": x, "top": y, "fontSize": 60, "fontFamily": "sans-serif", "fill": "black", "originX": "center", "originY": "center", "selectable": False, "evented": False})
+        
+    # Draw the equation elements spaced across the canvas
+    add_fraction(n1, d1, 100)
+    add_text(op1, 200)
+    add_fraction(n2, d2, 300)
+    add_text(op2, 400)
+    add_fraction(n3, d3, 500)
+    add_text("=", 600)
     
-    # Tightly packed to the left so the right side is completely open for answers
-    ax.text(0.10, 0.5, rf"$\frac{{{n1}}}{{{d1}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.23, 0.5, op1, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.36, 0.5, rf"$\frac{{{n2}}}{{{d2}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.49, 0.5, op2, fontsize=fontsize, ha='center', va='center')
-    ax.text(0.62, 0.5, rf"$\frac{{{n3}}}{{{d3}}}$", fontsize=fontsize, ha='center', va='center')
-    ax.text(0.75, 0.5, "=", fontsize=fontsize, ha='center', va='center')
+    # Draw the empty solution fraction line on the far right!
+    objects.append({"type": "line", "x1": 670, "y1": y, "x2": 770, "y2": y, "stroke": "black", "strokeWidth": 6, "selectable": False, "evented": False})
     
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
-    plt.close(fig)
-    buf.seek(0)
-    
-    return Image.open(buf).convert('RGBA').copy()
-
-# --- BACKEND STROKE RENDERER ---
-# This guarantees we never trigger a browser security crash!
-def create_final_image(bg_image, json_data):
-    # Lock the resolution to match our Streamlit Canvas dimensions exactly
-    img = bg_image.resize((350, 200), Image.Resampling.LANCZOS).convert("RGB")
-    draw = ImageDraw.Draw(img)
-    
-    if json_data and "objects" in json_data:
-        for obj in json_data["objects"]:
-            if obj.get("type") == "path":
-                path = obj.get("path", [])
-                stroke_color = obj.get("stroke", "#1E90FF")
-                stroke_width = int(obj.get("strokeWidth", 3))
-                
-                # Extract coordinates from the frontend path array and draw them in Python
-                points = []
-                for cmd in path:
-                    if len(cmd) >= 3:
-                        points.append((cmd[-2], cmd[-1]))
-                        
-                if len(points) > 1:
-                    draw.line(points, fill=stroke_color, width=stroke_width, joint="curve")
-                    
-    return img
+    return {"version": "4.4.0", "objects": objects}
 
 
 # --- State Management ---
@@ -119,7 +80,7 @@ if st.session_state.generating:
     with st.spinner("Generating problem..."):
         n1, d1, op1, n2, d2, op2, n3, d3, eq_str, lcm = generate_fraction_problem()
         st.session_state.math_data = (eq_str, lcm)
-        st.session_state.bg_image = draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3)
+        st.session_state.fabric_state = generate_fabric_json(n1, d1, op1, n2, d2, op2, n3, d3)
         st.session_state.ai_feedback = ""
         st.session_state.canvas_key += 1 
         st.session_state.generating = False
@@ -128,37 +89,46 @@ if st.session_state.generating:
 else:
     eq_str, lcm = st.session_state.math_data
     
-    # Portrait-optimized 350x200 canvas
+    # The Drawing Canvas (No background image! Driven entirely by native text!)
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", 
-        stroke_width=3,
+        stroke_width=6, # Thicker blue ink to ensure the AI can distinguish it from the black text
         stroke_color="#1E90FF",
-        background_image=st.session_state.bg_image,
+        background_color="#ffffff",
+        initial_drawing=st.session_state.fabric_state,
         update_streamlit=True,
-        height=200,
-        width=350,
+        height=300,
+        width=800,
         drawing_mode="freedraw",
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
     if st.button("Check My Answer!", type="primary", use_container_width=True):
-        # We NO LONGER check image_data. We only check if they drew paths in the json_data!
-        if canvas_result.json_data is not None and len(canvas_result.json_data.get("objects", [])) > 0:
+        if canvas_result.image_data is not None:
+            
+            # Composite the transparent canvas onto a crisp white background
+            final_canvas = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
+            white_bg = Image.new("RGBA", final_canvas.size, "WHITE")
+            final_canvas = Image.alpha_composite(white_bg, final_canvas).convert("RGB")
+            
+            # Briefly show the user exactly what Gemini is looking at!
+            st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_column_width=True)
+            
             with st.spinner("The AI Tutor is checking your work..."):
                 try:
-                    # Construct the composite image safely on the backend
-                    final_canvas = create_final_image(st.session_state.bg_image, canvas_result.json_data)
-                    
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     prompt = f"""
                     You are a gentle, encouraging math tutor helping a 9-year-old learn to add and subtract fractions.
                     The problem they are solving is: {eq_str}. 
                     The Lowest Common Multiple for the denominators is {lcm}.
                     
-                    I am sending you a single image of their digital workspace. The black text is the original problem. The blue ink is their handwriting.
-                    Note: The student is writing directly OVER the original black text to cross out denominators and convert them to the LCM. They will write their final answer on the far right.
+                    I am sending you a single image of their digital workspace. 
+                    The student has written in thick BLUE ink directly over the top of the black printed fractions. 
+                    They are using the blue ink to cross out denominators and write new equivalent fractions.
+                    Their final answer is written in blue ink on the far right, over the blank horizontal line.
                     
-                    Look at their blue ink. Did they find the correct common denominator? Did they convert the numerators correctly? Is their final answer correct (it does not need to be simplified)?
+                    Carefully separate the blue handwriting from the black printed text to see their logic. 
+                    Did they find the correct common denominator? Did they convert the numerators correctly? Is their final answer correct (it does not need to be simplified)?
                     
                     If they got the final answer correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them for finding the common denominator.
                     If they made a mistake, reply EXACTLY with the word "INCORRECT:" on the first line. Gently point out where they went wrong (e.g., "You found the right bottom number, but don't forget to multiply the top number too!") without giving them the final answer. Keep your tone highly supportive.
@@ -178,8 +148,6 @@ else:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Oops! The tutor had a glitch: {e}")
-        else:
-            st.error("Please draw something on the canvas before checking your answer!")
 
     if st.session_state.ai_feedback:
         st.info(st.session_state.ai_feedback)
