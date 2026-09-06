@@ -145,7 +145,7 @@ else:
                     final_canvas = render_strokes_on_image(st.session_state.bg_image, canvas_result.json_data)
                     
                     # Briefly show the user exactly what Gemini is looking at!
-                    st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_column_width=True)
+                    st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
                     
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     prompt = f"""
