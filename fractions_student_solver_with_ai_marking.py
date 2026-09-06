@@ -416,9 +416,15 @@ else:
                     st.error("Denominator cannot be zero!")
                 else:
                     if user_num * target_den == target_num * user_den:
-                        needs_rerun = process_correct_answer(user_num, user_den)
-                        if needs_rerun:
-                            st.rerun()
+                        # --- SMART AI ROUTING ---
+                        # If they are in the simplification phase, and submit a correct but unsimplified answer,
+                        # assume they simplified directly on the canvas and send it to the AI for grading.
+                        if st.session_state.current_frac_count == 1 and st.session_state.simplify_answers == "Yes" and math.gcd(user_num, user_den) > 1:
+                            trigger_ai = True
+                        else:
+                            needs_rerun = process_correct_answer(user_num, user_den)
+                            if needs_rerun:
+                                st.rerun()
                     else:
                         st.session_state.local_checked = True
                         st.session_state.is_correct = False
@@ -519,8 +525,8 @@ else:
                         st.session_state.ai_feedback = resp_text
                         st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                         
-                    if not getattr(st.session_state, 'is_correct', False) and not (st.session_state.current_frac_count == 1 and st.session_state.local_checked):
-                         st.rerun()
+                    # Unconditional rerun ensures the UI updates to reflect the AI's state changes
+                    st.rerun()
                     
                 except Exception as e:
                     st.error(f"Oops! The tutor had a glitch: {e}")
