@@ -133,19 +133,9 @@ st.markdown("""
         font-size: 1.2rem !important;
         font-weight: bold;
     }
-    .stButton > button {
-        padding: 0.2rem 0.5rem;
-        width: 100%;
-    }
-    /* Force columns to stay in a row on mobile screens */
-    @media (max-width: 576px) {
-        div[data-testid="stHorizontalBlock"] {
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-        }
-        div[data-testid="column"] {
-            min-width: 0 !important;
-        }
+    div.row-widget.stRadio > div {
+        flex-direction: row;
+        gap: 15px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -173,11 +163,20 @@ if 'user_typed_num' not in st.session_state:
     st.session_state.user_typed_num = 0
 if 'user_typed_den' not in st.session_state:
     st.session_state.user_typed_den = 1
-if 'active_tool' not in st.session_state:
-    st.session_state.active_tool = "Pen"
+if 'user_frac_input' not in st.session_state:
+    st.session_state.user_frac_input = ""
 
 def handle_settings_change():
     st.session_state.generating = True
+
+# --- Auto-Format Callback ---
+def format_fraction_input():
+    raw_input = st.session_state.user_frac_input
+    if raw_input:
+        match = re.match(r'^\s*(-?\d+)\s*[^\d]+\s*(-?\d+)\s*$', raw_input)
+        if match:
+            # Overwrite their string with a perfectly formatted fraction
+            st.session_state.user_frac_input = f"{match.group(1)}/{match.group(2)}"
 
 col1, col2 = st.columns([5, 1])
 with col1:
@@ -198,7 +197,7 @@ if st.session_state.generating:
         st.session_state.color_index = 0 
         st.session_state.local_checked = False
         st.session_state.is_correct = False
-        st.session_state.active_tool = "Pen"
+        st.session_state.user_frac_input = "" # Wipe the input box for new problems
         
         st.session_state.stroke_history = [[]]
         st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
@@ -212,34 +211,10 @@ else:
     
     st.write(f"Cross out the denominators! Current pen: **{current_color_name}**")
 
-    # --- PERMANENT CUSTOM TOOLBAR ---
-    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
-    with t_col1:
-        if st.button("🖌️ Pen", type="primary" if st.session_state.active_tool == "Pen" else "secondary", use_container_width=True):
-            st.session_state.active_tool = "Pen"
-            st.rerun()
-    with t_col2:
-        if st.button("🧽 Eraser", type="primary" if st.session_state.active_tool == "Eraser" else "secondary", use_container_width=True):
-            st.session_state.active_tool = "Eraser"
-            st.rerun()
-    with t_col3:
-        if st.button("↩️ Undo", use_container_width=True):
-            if len(st.session_state.stroke_history) > 1:
-                st.session_state.stroke_history.pop()
-                last_valid = st.session_state.stroke_history[-1]
-                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
-                st.session_state.canvas_key += 1
-                st.rerun()
-    with t_col4:
-        if st.button("🗑️ Clear", use_container_width=True):
-            st.session_state.stroke_history = [[]]
-            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
-            st.session_state.color_index = 0
-            st.session_state.canvas_key += 1
-            st.rerun()
-
-    active_stroke_color = current_color_hex if st.session_state.active_tool == "Pen" else "#FFFFFE"
-    active_stroke_width = 3 if st.session_state.active_tool == "Pen" else 15
+    # --- COMPACT RADIO TOOLBAR ---
+    tool = st.radio("Tool", ["🖌️ Pen", "🧽 Tap-Eraser"], horizontal=True, label_visibility="collapsed")
+    active_stroke_color = current_color_hex if tool == "🖌️ Pen" else "#FFFFFE"
+    active_stroke_width = 3 if tool == "🖌️ Pen" else 15
 
     # --- THE DIGITAL CANVAS ---
     canvas_result = st_canvas(
@@ -252,9 +227,28 @@ else:
         width=350,
         drawing_mode="freedraw",
         return_image_data=True, 
+        display_toolbar=False, 
         initial_drawing=st.session_state.active_initial_drawing, 
         key=f"canvas_{st.session_state.canvas_key}",
     )
+
+    # --- ACTION BUTTONS ---
+    col_u, col_c = st.columns(2)
+    with col_u:
+        if st.button("↩️ Undo", use_container_width=True):
+            if len(st.session_state.stroke_history) > 1:
+                st.session_state.stroke_history.pop()
+                last_valid = st.session_state.stroke_history[-1]
+                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
+                st.session_state.canvas_key += 1
+                st.rerun()
+    with col_c:
+        if st.button("🗑️ Clear All", use_container_width=True):
+            st.session_state.stroke_history = [[]]
+            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
+            st.session_state.color_index = 0
+            st.session_state.canvas_key += 1
+            st.rerun()
 
     # --- THE BOUNDING BOX COLLISION ENGINE ---
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
@@ -301,7 +295,9 @@ else:
     st.write("---")
     
     # --- HYBRID NATIVE INPUT ---
-    user_answer = st.text_input("Type your final answer:", placeholder="e.g. 35.70 or 35/70")
+    # The on_change callback triggers the moment they click Check (or tap outside the box)
+    st.text_input("Type your final answer:", placeholder="e.g. 35.70 or 35/70", key="user_frac_input", on_change=format_fraction_input)
+    user_answer = st.session_state.user_frac_input
     
     # --- JAVASCRIPT INJECTION: FORCE NUMERIC KEYPAD ---
     components.html(
@@ -332,7 +328,7 @@ else:
                     
                     if user_num * lcm == target_num * user_den:
                         st.session_state.is_correct = True
-                        st.session_state.ai_feedback = f"🌟 **Awesome job!** Your math is absolutely perfect! (Read as {user_num}/{user_den})"
+                        st.session_state.ai_feedback = "🌟 **Awesome job!** Your math is absolutely perfect!"
                     else:
                         st.session_state.is_correct = False
                         st.session_state.ai_feedback = ""
@@ -346,7 +342,7 @@ else:
         if st.session_state.is_correct:
             st.success(st.session_state.ai_feedback)
         else:
-            st.warning(f"💡 **Almost there!** We read your answer as {st.session_state.user_typed_num}/{st.session_state.user_typed_den}, but that isn't quite right.")
+            st.warning("💡 **Almost there!** That final fraction isn't quite right.")
             
             if st.button("🤖 Ask AI Tutor to check my workings", use_container_width=True):
                 if canvas_result.image_data is not None:
