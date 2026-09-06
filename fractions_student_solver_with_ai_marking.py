@@ -73,7 +73,7 @@ def draw_fraction_equation(n1, d1, op1, n2, d2, op2, n3, d3):
     
     return Image.open(buf).convert('RGBA').copy()
 
-# --- BACKEND STROKE RENDERER (Now Pixel-Perfect) ---
+# --- BACKEND STROKE RENDERER (Pixel-Perfect Math Fix) ---
 def render_strokes_on_image(bg_image, json_data):
     img = bg_image.copy()
     draw = ImageDraw.Draw(img)
@@ -85,18 +85,24 @@ def render_strokes_on_image(bg_image, json_data):
                 stroke_color = obj.get("stroke", "#1E90FF")
                 stroke_width = int(obj.get("strokeWidth", 3))
                 
-                # Fabric.js mathematically offsets paths. We calculate the offset here!
                 left = obj.get("left", 0)
                 top = obj.get("top", 0)
                 path_offset_x = obj.get("pathOffset", {}).get("x", 0)
                 path_offset_y = obj.get("pathOffset", {}).get("y", 0)
                 
+                origin_x = obj.get("originX", "left")
+                origin_y = obj.get("originY", "top")
+                
+                # Correctly calculate the absolute center of the stroke bounding box
+                center_x = left if origin_x == "center" else left + path_offset_x
+                center_y = top if origin_y == "center" else top + path_offset_y
+                
                 points = []
                 for cmd in path:
                     if len(cmd) >= 3:
-                        # Extract raw coordinates and apply the bounding box offset
-                        x = cmd[-2] - path_offset_x + left
-                        y = cmd[-1] - path_offset_y + top
+                        # Add the relative points to the absolute center!
+                        x = cmd[-2] + center_x
+                        y = cmd[-1] + center_y
                         points.append((x, y))
                         
                 if len(points) > 1:
@@ -145,10 +151,9 @@ else:
         if canvas_result.json_data is not None and len(canvas_result.json_data.get("objects", [])) > 0:
             with st.spinner("The AI Tutor is checking your work..."):
                 try:
-                    # Draw the ink safely on the server side using the fixed offset logic
                     final_canvas = render_strokes_on_image(st.session_state.bg_image, canvas_result.json_data)
                     
-                    # Briefly show the user exactly what Gemini is looking at!
+                    # You will now see your blue ink perfectly overlaid here!
                     st.image(final_canvas, caption="Sending this image to the AI Tutor...", use_container_width=True)
                     
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -163,8 +168,8 @@ else:
                     Their final answer is written in blue ink on the far right, over the black horizontal line.
                     
                     IMPORTANT GRADING RULES:
-                    1. If a fraction already has the lowest common denominator (e.g., it is already out of {lcm}), the student may leave it completely unmarked. This is correct! Do not penalize them for leaving it blank.
-                    2. Read their blue ink to see if they converted the other fractions correctly.
+                    1. First, silently calculate the correct final numerator and denominator yourself.
+                    2. Read their blue ink to see if they converted the original fractions correctly. (Note: If a fraction already has the lowest common denominator, they may leave it completely unmarked. This is correct!)
                     3. Check their final answer on the right. It does not need to be simplified.
                     
                     If their final math is correct, reply EXACTLY with the word "CORRECT:" on the first line, followed by a warm, enthusiastic message praising them.
