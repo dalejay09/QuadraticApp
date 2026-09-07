@@ -9,19 +9,30 @@ from fpdf import FPDF
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Mark My Worksheet", page_icon="📝", layout="centered")
 
-# Custom CSS for Colored Table Output
+# Custom CSS for Colored Table Output & Primary Button
 st.markdown("""
     <style>
     .result-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-family: sans-serif; }
     .result-table th { background-color: #f0f2f6; padding: 12px; text-align: left; border-bottom: 2px solid #ddd; }
     .result-table td { padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; }
-    .row-CORRECT { background-color: rgba(50, 205, 50, 0.15); }       /* Soft Green */
-    .row-NEARLY { background-color: rgba(255, 140, 0, 0.15); }        /* Soft Orange */
-    .row-INCORRECT { background-color: rgba(255, 36, 0, 0.15); }      /* Soft Red */
+    .row-CORRECT { background-color: rgba(50, 205, 50, 0.15); }       
+    .row-NEARLY { background-color: rgba(255, 140, 0, 0.15); }        
+    .row-INCORRECT { background-color: rgba(255, 36, 0, 0.15); }      
     .status-badge { font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 0.9em; }
     .badge-CORRECT { color: #1e7e34; background-color: #d4edda; }
     .badge-NEARLY { color: #b06000; background-color: #ffe8cc; }
     .badge-INCORRECT { color: #a01818; background-color: #f8d7da; }
+    
+    /* Custom Styling for the Primary Button */
+    button[kind="primary"] {
+        background-color: #007AFF !important;
+        border-color: #007AFF !important;
+        color: white !important;
+    }
+    button[kind="primary"]:hover {
+        background-color: #0056b3 !important;
+        border-color: #0056b3 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -33,6 +44,19 @@ class QuestionMarking(BaseModel):
 
 class MarkingReport(BaseModel):
     results: list[QuestionMarking]
+
+# --- TEXT SANITIZER FOR PDF ---
+def sanitize_for_pdf(text: str) -> str:
+    # Swaps out fancy characters that crash FPDF's default latin-1 font
+    replacements = {
+        '“': '"', '”': '"', '‘': "'", '’': "'",
+        '—': '-', '–': '-', '…': '...',
+        '×': 'x', '÷': '/', '²': '^2', '³': '^3',
+        '\n': ' '
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text.encode('latin-1', 'ignore').decode('latin-1')
 
 # --- PDF GENERATOR ---
 def create_pdf_report(report_data: MarkingReport) -> bytes:
@@ -50,12 +74,18 @@ def create_pdf_report(report_data: MarkingReport) -> bytes:
     # Body
     for item in report_data.results:
         pdf.set_font("helvetica", "B", 12)
-        pdf.cell(0, 8, f"Question: {item.question_indicator} | Status: {item.status.upper()}", ln=True)
+        safe_indicator = sanitize_for_pdf(item.question_indicator)
+        pdf.cell(0, 8, f"Question: {safe_indicator} | Status: {item.status.upper()}", ln=True)
+        
         pdf.set_font("helvetica", "", 11)
-        pdf.multi_cell(0, 6, f"Feedback: {item.feedback}")
+        safe_feedback = sanitize_for_pdf(item.feedback)
+        pdf.multi_cell(0, 6, f"Feedback: {safe_feedback}")
         pdf.ln(4)
         
-    return pdf.output(dest="S")
+    try:
+        return bytes(pdf.output()) # Supports modern fpdf2
+    except TypeError:
+        return pdf.output(dest="S").encode("latin-1", "ignore") # Fallback for old fpdf
 
 # --- UI STATE ---
 if "marking_results" not in st.session_state:
@@ -71,7 +101,7 @@ worksheet_file = st.camera_input("Take a clear photo of the worksheet questions:
 st.markdown("### 2. Your Workings")
 workings_files = st.file_uploader("Take or upload photos of your handwritten workings:", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
 
-if st.button("🤖 Grade My Work", type="primary", use_container_width=True):
+if st.button("🤖 Mark My Work", type="primary", use_container_width=True):
     if not worksheet_file:
         st.error("Please take a photo of the worksheet first!")
     elif not workings_files:
@@ -131,13 +161,9 @@ if st.session_state.marking_results:
         if safe_status not in ["CORRECT", "NEARLY", "INCORRECT"]: 
             safe_status = "INCORRECT"
             
-        html_table += f"""
-        <tr class='row-{safe_status}'>
-            <td><strong>{row.question_indicator}</strong></td>
-            <td><span class='status-badge badge-{safe_status}'>{row.status.upper()}</span></td>
-            <td>{row.feedback}</td>
-        </tr>
-        """
+        # Assembled on one flat line so Markdown doesn't mistake indents for Code Blocks
+        html_table += f"<tr class='row-{safe_status}'><td><strong>{row.question_indicator}</strong></td><td><span class='status-badge badge-{safe_status}'>{row.status.upper()}</span></td><td>{row.feedback}</td></tr>"
+        
     html_table += "</table>"
     
     st.markdown(html_table, unsafe_allow_html=True)
@@ -145,13 +171,16 @@ if st.session_state.marking_results:
     st.write("")
     
     # Render PDF Export Button
-    pdf_bytes = create_pdf_report(st.session_state.marking_results)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    st.download_button(
-        label="📥 Download PDF Report",
-        data=pdf_bytes,
-        file_name=f"worksheet_ai_marking_{timestamp}.pdf",
-        mime="application/pdf",
-        use_container_width=True
-)
+    try:
+        pdf_bytes = create_pdf_report(st.session_state.marking_results)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        st.download_button(
+            label="📥 Download PDF Report",
+            data=pdf_bytes,
+            file_name=f"worksheet_ai_marking_{timestamp}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+    except Exception as e:
+        st.error(f"Failed to generate PDF: {e}")
