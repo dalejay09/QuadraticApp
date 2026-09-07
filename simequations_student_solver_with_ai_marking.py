@@ -60,6 +60,7 @@ def get_valid_vars(count):
     return sorted(random.sample(valid_chars, count))
 
 def fmt_expr(coefs, v_list):
+    # Formats equations as a single plain-text string (used for AI and PDF)
     terms = []
     for c, v in zip(coefs, v_list):
         if c == 0: continue
@@ -68,6 +69,28 @@ def fmt_expr(coefs, v_list):
         val = "" if abs(c) == 1 else str(abs(c))
         terms.append(f"{sign_str}{val}{v}")
     return " ".join(terms) if terms else "0"
+
+def build_canvas_row(coefs, v_list, rhs):
+    # Formats equations into strict matrix columns for perfect visual alignment
+    row = []
+    has_prev = False
+    for c, v in zip(coefs, v_list):
+        if c == 0:
+            row.append("")
+        else:
+            val_str = "" if abs(c) == 1 else str(abs(c))
+            if not has_prev:
+                sign = "-" if c < 0 else ""
+                row.append(f"{sign}{val_str}{v}")
+                has_prev = True
+            else:
+                sign = "+" if c > 0 else "-"
+                # '\,' adds a tiny typographic math-space so signs don't crash into numbers
+                row.append(f"{sign}\\,{val_str}{v}") 
+                
+    row.append("=")
+    row.append(str(rhs))
+    return row
 
 def get_nonzero_randint(a, b):
     return random.choice([x for x in range(a, b + 1) if x != 0])
@@ -97,10 +120,10 @@ def generate_algebra_problem(override_var_count=None):
         if not rhs: rhs = "0"
         
         eq_str = f"{lhs} = {rhs}"
-        
-        # Fallback step (used if AI fails)
         fallback = f"1. Group terms: {a-c}{v} = {d-b}\n2. Solve: {v} = {ans}"
-        return [eq_str], {v: ans}, vars, 450, fallback
+        canvas_eqs = [[eq_str]] # Single variable doesn't need column alignment
+        
+        return [eq_str], {v: ans}, vars, 450, fallback, canvas_eqs
 
     elif var_count == 2:
         v1, v2 = vars
@@ -118,9 +141,14 @@ def generate_algebra_problem(override_var_count=None):
         
         eq1 = f"{fmt_expr([a1, b1], vars)} = {c1}"
         eq2 = f"{fmt_expr([a2, b2], vars)} = {c2}"
-        
         fallback = f"Solution: {v1} = {ans1}, {v2} = {ans2}\n(Check via substitution)"
-        return [eq1, eq2], {v1: ans1, v2: ans2}, vars, 650, fallback
+        
+        canvas_eqs = [
+            build_canvas_row([a1, b1], vars, c1),
+            build_canvas_row([a2, b2], vars, c2)
+        ]
+        
+        return [eq1, eq2], {v1: ans1, v2: ans2}, vars, 650, fallback, canvas_eqs
 
     elif var_count == 3:
         v1, v2, v3 = vars
@@ -145,9 +173,15 @@ def generate_algebra_problem(override_var_count=None):
         eq1 = f"{fmt_expr(r1, vars)} = {c1}"
         eq2 = f"{fmt_expr(r2, vars)} = {c2}"
         eq3 = f"{fmt_expr(r3, vars)} = {c3}"
-        
         fallback = f"Solution: {v1}={ans1}, {v2}={ans2}, {v3}={ans3}\n(Check via substitution)"
-        return [eq1, eq2, eq3], {v1: ans1, v2: ans2, v3: ans3}, vars, 800, fallback
+        
+        canvas_eqs = [
+            build_canvas_row(r1, vars, c1),
+            build_canvas_row(r2, vars, c2),
+            build_canvas_row(r3, vars, c3)
+        ]
+        
+        return [eq1, eq2, eq3], {v1: ans1, v2: ans2, v3: ans3}, vars, 800, fallback, canvas_eqs
 
 # --- Integrated AI-PDF Generation Engine ---
 def create_pdf_bytes(var_count):
@@ -156,7 +190,6 @@ def create_pdf_bytes(var_count):
         problems = [generate_algebra_problem(var_count) for _ in range(20)]
         ai_steps = {}
         
-        # Call AI to generate human-readable solutions in bulk
         try:
             client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
             
@@ -218,7 +251,6 @@ def create_pdf_bytes(var_count):
         pdf.savefig(fig_ans); plt.close(fig_ans)
 
         # Page 3+: AI Generated Solutions Appendix
-        # 5 questions per column, 10 per page
         for page_idx in range(2):
             fig_app, ax_app = plt.subplots(figsize=(8.27, 11.69))
             ax_app.axis('off')
@@ -228,7 +260,7 @@ def create_pdf_bytes(var_count):
             for i in range(5):
                 q_id_L = offset + i + 1
                 prob_L = problems[q_id_L - 1]
-                step_L = ai_steps.get(q_id_L, prob_L[4]) # Uses AI if available, else fallback
+                step_L = ai_steps.get(q_id_L, prob_L[4]) 
                 txt_L = f"Q{q_id_L}:\n" + "\n".join(prob_L[0]) + "\n\n" + step_L
                 ax_app.text(0.05, 0.88 - (i*0.17), txt_L, fontsize=8, va='top', wrap=True)
                 
@@ -243,7 +275,7 @@ def create_pdf_bytes(var_count):
     return buffer.getvalue()
 
 # --- Visual Engine: BACKEND MATPLOTLIB ---
-def draw_equations(eqs, height_px):
+def draw_equations(canvas_eqs, height_px):
     width_px = 350
     fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100) 
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
@@ -251,12 +283,37 @@ def draw_equations(eqs, height_px):
     ax.set_ylim(0, 1)
     ax.axis('off')
     
-    font_size = 20 if len(eqs) <= 2 else 16
+    num_eqs = len(canvas_eqs)
+    font_size = 20 if num_eqs <= 2 else 16
     y_start = 0.90
     y_step = 0.08 if height_px <= 450 else 0.06
     
-    for i, eq in enumerate(eqs):
-        ax.text(0.5, y_start - i * y_step, f"${eq}$", fontsize=font_size, ha='center', va='top')
+    for i, row in enumerate(canvas_eqs):
+        y = y_start - i * y_step
+        if len(row) == 1:
+            # 1 Variable (Center aligned standard string)
+            ax.text(0.5, y, f"${row[0]}$", fontsize=font_size, ha='center', va='top')
+        else:
+            # Matrix alignment for 2 or 3 Variables
+            num_vars = len(row) - 2
+            
+            if num_vars == 2:
+                x_coords = [0.38, 0.58] # Right-aligned variables
+                x_eq = 0.65             # Centered equals
+                x_rhs = 0.70            # Left-aligned answer
+            else:
+                x_coords = [0.26, 0.46, 0.66] 
+                x_eq = 0.72             
+                x_rhs = 0.77            
+
+            # Draw Variable Columns
+            for j in range(num_vars):
+                if row[j]: 
+                    ax.text(x_coords[j], y, f"${row[j]}$", fontsize=font_size, ha='right', va='top')
+            
+            # Draw Equals and RHS
+            ax.text(x_eq, y, "$=$", fontsize=font_size, ha='center', va='top')
+            ax.text(x_rhs, y, f"${row[-1]}$", fontsize=font_size, ha='left', va='top')
     
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
@@ -329,9 +386,17 @@ with col_set:
 
 if st.session_state.generating:
     with st.spinner("Generating equations..."):
-        eqs, solutions, vars_list, canvas_height, fallback = generate_algebra_problem()
-        st.session_state.math_data = (eqs, solutions, vars_list, canvas_height, fallback)
-        st.session_state.bg_image = draw_equations(eqs, canvas_height)
+        
+        # Unpack the 6-item tuple safely
+        if len(st.session_state.get("math_data", [])) == 6:
+            eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = generate_algebra_problem()
+        else:
+            # Clean generation ensures the new 6-item tuple is created properly
+            generation_output = generate_algebra_problem()
+            eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = generation_output
+            
+        st.session_state.math_data = (eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs)
+        st.session_state.bg_image = draw_equations(canvas_eqs, canvas_height)
         
         st.session_state.ai_feedback = ""
         st.session_state.color_index = 0 
@@ -343,7 +408,13 @@ if st.session_state.generating:
         st.rerun()
 
 else:
-    eqs, solutions, vars_list, canvas_height, fallback = st.session_state.math_data
+    # Unpack based on updated data architecture
+    if len(st.session_state.math_data) == 6:
+        eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = st.session_state.math_data
+    else:
+        st.session_state.generating = True
+        st.rerun()
+        
     sol_str = ", ".join([f"{k} = {v}" for k, v in solutions.items()])
 
     if st.session_state.input_mode == "🖌️ Digital Canvas":
