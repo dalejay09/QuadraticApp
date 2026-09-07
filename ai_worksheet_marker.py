@@ -109,10 +109,17 @@ if st.button("🤖 Mark My Work", type="primary", use_container_width=True):
     else:
         with st.spinner("The AI Tutor is cross-referencing your workings with the worksheet..."):
             try:
-                # Prepare images for Gemini
+                # Prepare and compress the master worksheet
                 ws_img = Image.open(worksheet_file).convert('RGB')
-                wk_imgs = [Image.open(f).convert('RGB') for f in workings_files]
-                
+                ws_img.thumbnail((1024, 1024))
+
+                # Prepare and compress all pages of student workings
+                wk_imgs = []
+                for f in workings_files:
+                    img = Image.open(f).convert('RGB')
+                    img.thumbnail((1024, 1024))
+                    wk_imgs.append(img)
+                                
                 payload = [ws_img] + wk_imgs
                 
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
