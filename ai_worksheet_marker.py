@@ -1,11 +1,11 @@
 import streamlit as st
 import io
+import re
 from PIL import Image
 from google import genai
 from pydantic import BaseModel
 from datetime import datetime
 from fpdf import FPDF
-import re
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Mark My Worksheet", page_icon="📝", layout="centered")
@@ -91,16 +91,18 @@ def create_pdf_report(report_data: MarkingReport) -> bytes:
 # --- UI STATE ---
 if "marking_results" not in st.session_state:
     st.session_state.marking_results = None
+if "widget_key" not in st.session_state:
+    st.session_state.widget_key = 0
 
 # --- APP LAYOUT ---
 st.title("📝 Mark My Worksheet")
-st.write("Snap a photo of the blank worksheet, then upload your handwritten workings. The AI Tutor will figure out which working belongs to which question and grade it!")
+st.write("Snap a photo of the blank worksheet and upload your handwritten workings. Then our AI tutor will mark it for you!")
 
 st.markdown("### 1. The Worksheet")
-worksheet_file = st.camera_input("Take a clear photo of the worksheet questions:")
+worksheet_file = st.camera_input("Take a clear photo of the worksheet questions:", key=f"cam_{st.session_state.widget_key}")
 
 st.markdown("### 2. Your Workings")
-workings_files = st.file_uploader("Take or upload photos of your handwritten workings:", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+workings_files = st.file_uploader("Take or upload photos of your handwritten workings:", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key=f"up_{st.session_state.widget_key}")
 
 if st.button("🤖 Mark My Work", type="primary", use_container_width=True):
     if not worksheet_file:
@@ -113,14 +115,14 @@ if st.button("🤖 Mark My Work", type="primary", use_container_width=True):
                 # Prepare and compress the master worksheet
                 ws_img = Image.open(worksheet_file).convert('RGB')
                 ws_img.thumbnail((1024, 1024))
-
+                
                 # Prepare and compress all pages of student workings
                 wk_imgs = []
                 for f in workings_files:
                     img = Image.open(f).convert('RGB')
                     img.thumbnail((1024, 1024))
                     wk_imgs.append(img)
-                                
+                
                 payload = [ws_img] + wk_imgs
                 
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -163,16 +165,13 @@ if st.session_state.marking_results:
     # Generate HTML Table
     html_table = "<table class='result-table'><tr><th>Question</th><th>Status</th><th>Feedback</th></tr>"
     
-    
-    # ... inside the RENDER RESULTS block ...
-    
     for row in st.session_state.marking_results.results:
         # Normalize status to match CSS classes
         safe_status = row.status.upper()
         if safe_status not in ["CORRECT", "NEARLY", "INCORRECT"]: 
             safe_status = "INCORRECT"
             
-        # THE FIX: Convert plaintext exponents (e.g., ^2 or ^10) into proper HTML superscripts
+        # Format exponents for HTML display
         display_feedback = re.sub(r'\^(\d+)', r'<sup>\1</sup>', row.feedback)
             
         # Assembled on one flat line so Markdown doesn't mistake indents for Code Blocks
@@ -198,3 +197,9 @@ if st.session_state.marking_results:
         )
     except Exception as e:
         st.error(f"Failed to generate PDF: {e}")
+        
+    st.write("---")
+    if st.button("🔄 Next Worksheet", use_container_width=True):
+        st.session_state.marking_results = None
+        st.session_state.widget_key += 1
+        st.rerun()
