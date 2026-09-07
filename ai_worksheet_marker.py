@@ -76,7 +76,11 @@ def create_pdf_report(report_data: MarkingReport) -> bytes:
     for item in report_data.results:
         pdf.set_font("helvetica", "B", 12)
         safe_indicator = sanitize_for_pdf(item.question_indicator)
-        pdf.cell(0, 8, f"Question: {safe_indicator} | Status: {item.status.upper()}", ln=True)
+        
+        # Trim "Question " or "Q " from the start to prevent "Question: Question 1" redundancy
+        safe_indicator = re.sub(r'(?i)^(Question|Q)\s*:?\s*', '', safe_indicator).strip()
+        
+        pdf.cell(0, 8, f"Question: {safe_indicator} | {item.status.upper()}", ln=True)
         
         pdf.set_font("helvetica", "", 11)
         safe_feedback = sanitize_for_pdf(item.feedback)
