@@ -2,6 +2,7 @@ import streamlit as st
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import random
 import string
 import math
@@ -9,6 +10,7 @@ import io
 import re
 import base64
 from PIL import Image
+from datetime import datetime
 from google import genai
 import streamlit.components.v1 as components
 
@@ -32,7 +34,6 @@ COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
 # --- Custom CSS ---
 st.markdown("""
     <style>
-    /* Custom Styling for Primary Buttons */
     button[kind="primary"] {
         background-color: #007AFF !important;
         border-color: #007AFF !important;
@@ -47,7 +48,6 @@ st.markdown("""
 
 # --- Math Engine: ALGEBRA ---
 def get_valid_vars(count):
-    # Exclude constants and confusing letters
     valid_chars = [c for c in string.ascii_lowercase if c not in 'eilo']
     return sorted(random.sample(valid_chars, count))
 
@@ -61,13 +61,16 @@ def fmt_expr(coefs, v_list):
         terms.append(f"{sign_str}{val}{v}")
     return " ".join(terms) if terms else "0"
 
-def generate_algebra_problem():
-    var_count = st.session_state.get('var_count', 1)
+def get_nonzero_randint(a, b):
+    return random.choice([x for x in range(a, b + 1) if x != 0])
+
+def generate_algebra_problem(override_var_count=None):
+    var_count = override_var_count if override_var_count is not None else st.session_state.get('var_count', 1)
     vars = get_valid_vars(var_count)
     
     if var_count == 1:
         v = vars[0]
-        ans = random.randint(-10, 10)
+        ans = get_nonzero_randint(-10, 10)
         a = random.choice([-5, -4, -3, -2, -1, 2, 3, 4, 5])
         c = random.choice([-5, -4, -3, -2, -1, 2, 3, 4, 5])
         while a == c: c = random.choice([-5, -4, -3, -2, -1, 2, 3, 4, 5])
@@ -86,29 +89,43 @@ def generate_algebra_problem():
         if not rhs: rhs = "0"
         
         eq_str = f"{lhs} = {rhs}"
-        return [eq_str], {v: ans}, vars, 450
+        
+        steps = [
+            f"1. Group {v} terms: {a}{v} - {c}{v} = {d} - {b}",
+            f"2. Simplify: {a-c}{v} = {d-b}",
+            f"3. Solve: {v} = {ans}"
+        ]
+        
+        return [eq_str], {v: ans}, vars, 450, steps
 
     elif var_count == 2:
         v1, v2 = vars
-        ans1, ans2 = random.randint(-6, 6), random.randint(-6, 6)
+        ans1, ans2 = get_nonzero_randint(-6, 6), get_nonzero_randint(-6, 6)
         
         while True:
             a1, b1 = random.randint(-4, 4), random.randint(-4, 4)
             a2, b2 = random.randint(-4, 4), random.randint(-4, 4)
             if a1 == 0 and b1 == 0: continue
             if a2 == 0 and b2 == 0: continue
-            if a1 * b2 - a2 * b1 != 0: break # Determinant != 0 ensures unique solution
+            if a1 * b2 - a2 * b1 != 0: break 
             
         c1 = a1 * ans1 + b1 * ans2
         c2 = a2 * ans1 + b2 * ans2
         
         eq1 = f"{fmt_expr([a1, b1], vars)} = {c1}"
         eq2 = f"{fmt_expr([a2, b2], vars)} = {c2}"
-        return [eq1, eq2], {v1: ans1, v2: ans2}, vars, 650
+        
+        steps = [
+            f"**Solution:** {v1} = {ans1}, {v2} = {ans2}",
+            f"**Check Eq 1:** {a1}({ans1}) + {b1}({ans2}) = {c1}",
+            f"**Check Eq 2:** {a2}({ans1}) + {b2}({ans2}) = {c2}"
+        ]
+        
+        return [eq1, eq2], {v1: ans1, v2: ans2}, vars, 650, steps
 
     elif var_count == 3:
         v1, v2, v3 = vars
-        ans1, ans2, ans3 = random.randint(-4, 4), random.randint(-4, 4), random.randint(-4, 4)
+        ans1, ans2, ans3 = get_nonzero_randint(-4, 4), get_nonzero_randint(-4, 4), get_nonzero_randint(-4, 4)
         
         def get_row():
             while True:
@@ -130,7 +147,62 @@ def generate_algebra_problem():
         eq2 = f"{fmt_expr(r2, vars)} = {c2}"
         eq3 = f"{fmt_expr(r3, vars)} = {c3}"
         
-        return [eq1, eq2, eq3], {v1: ans1, v2: ans2, v3: ans3}, vars, 800
+        steps = [
+            f"**Solution:** {v1} = {ans1}, {v2} = {ans2}, {v3} = {ans3}",
+            f"**Check Eq 1:** {r1[0]}({ans1}) + {r1[1]}({ans2}) + {r1[2]}({ans3}) = {c1}",
+            f"**Check Eq 2:** {r2[0]}({ans1}) + {r2[1]}({ans2}) + {r2[2]}({ans3}) = {c2}",
+            f"**Check Eq 3:** {r3[0]}({ans1}) + {r3[1]}({ans2}) + {r3[2]}({ans3}) = {c3}"
+        ]
+        
+        return [eq1, eq2, eq3], {v1: ans1, v2: ans2, v3: ans3}, vars, 800, steps
+
+# --- PDF Generation Engine ---
+def create_pdf_bytes(var_count):
+    buffer = io.BytesIO()
+    with PdfPages(buffer) as pdf:
+        problems = [generate_algebra_problem(var_count) for _ in range(20)]
+        
+        # Page 1: Questions
+        fig, axes = plt.subplots(figsize=(8.27, 11.69))
+        axes.axis('off')
+        axes.text(0.5, 0.95, f"Algebra 101 Worksheet ({var_count} Variable{'s' if var_count>1 else ''})", fontsize=16, fontweight='bold', ha='center')
+        
+        for i in range(10):
+            eq_text_L = "\n".join(problems[i][0])
+            eq_text_R = "\n".join(problems[i+10][0])
+            axes.text(0.05, 0.88 - (i*0.085), f"Q{i+1}:\n{eq_text_L}", fontsize=11, va='top')
+            axes.text(0.55, 0.88 - (i*0.085), f"Q{i+11}:\n{eq_text_R}", fontsize=11, va='top')
+        pdf.savefig(fig); plt.close(fig)
+
+        # Page 2: Answer Key
+        fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
+        ax_ans.axis('off')
+        ax_ans.text(0.5, 0.95, "Algebra 101 Answer Key", fontsize=16, fontweight='bold', ha='center')
+        for i in range(10):
+            ans_L = ", ".join([f"{k} = {v}" for k, v in problems[i][1].items()])
+            ans_R = ", ".join([f"{k} = {v}" for k, v in problems[i+10][1].items()])
+            ax_ans.text(0.05, 0.88 - (i*0.085), f"Q{i+1}: {ans_L}", fontsize=11, va='top')
+            ax_ans.text(0.55, 0.88 - (i*0.085), f"Q{i+11}: {ans_R}", fontsize=11, va='top')
+        pdf.savefig(fig_ans); plt.close(fig_ans)
+
+        # Page 3+: Appendix (Solutions)
+        for page_idx in range(2):
+            fig_app, ax_app = plt.subplots(figsize=(8.27, 11.69))
+            ax_app.axis('off')
+            ax_app.text(0.5, 0.95, f"Solutions Appendix (Page {page_idx+1})", fontsize=14, fontweight='bold', ha='center')
+            
+            offset = page_idx * 10
+            for i in range(5):
+                prob_L = problems[offset + i]
+                txt_L = f"Q{offset + i + 1}:\n" + "\n".join(prob_L[0]) + "\n\n" + "\n".join(prob_L[4])
+                ax_app.text(0.05, 0.88 - (i*0.17), txt_L, fontsize=9, va='top')
+                
+                prob_R = problems[offset + i + 5]
+                txt_R = f"Q{offset + i + 6}:\n" + "\n".join(prob_R[0]) + "\n\n" + "\n".join(prob_R[4])
+                ax_app.text(0.55, 0.88 - (i*0.17), txt_R, fontsize=9, va='top')
+            pdf.savefig(fig_app); plt.close(fig_app)
+            
+    return buffer.getvalue()
 
 # --- Visual Engine: BACKEND MATPLOTLIB ---
 def draw_equations(eqs, height_px):
@@ -165,21 +237,64 @@ if 'color_index' not in st.session_state: st.session_state.color_index = 0
 if 'stroke_history' not in st.session_state: st.session_state.stroke_history = [[]]
 if 'active_initial_drawing' not in st.session_state: st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
 if 'is_correct' not in st.session_state: st.session_state.is_correct = False
+if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
+if 'scroll_to_top' not in st.session_state: st.session_state.scroll_to_top = False
 
 def handle_settings_change():
     st.session_state.generating = True
+    st.session_state.pdf_bytes = None
 
-col1, col2 = st.columns([5, 1])
-with col1:
-    st.title("Algebra 101")
-with col2:
+# Auto-Scroll Injector
+if st.session_state.scroll_to_top:
+    components.html("<script>window.parent.scrollTo(0, 0);</script>", height=0)
+    st.session_state.scroll_to_top = False
+
+# --- Top Bar UI ---
+st.title("Algebra 101")
+
+col_actions, col_set = st.columns([5, 1])
+with col_actions:
+    with st.popover("📄 Worksheet Actions", use_container_width=True):
+        st.markdown("**1. Create a physical worksheet**")
+        
+        if st.session_state.pdf_bytes is None:
+            if st.button("⚙️ Generate Worksheet PDF", use_container_width=True):
+                with st.spinner("Compiling Master PDF..."):
+                    st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.var_count)
+                st.rerun()
+        else:
+            current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button(
+                label="⬇️ Download Worksheet (PDF)",
+                data=st.session_state.pdf_bytes,
+                file_name=f"Algebra_101_Worksheet_{current_time}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary"
+            )
+            if st.button("🗑️ Clear / Reset PDF", use_container_width=True):
+                st.session_state.pdf_bytes = None
+                st.rerun()
+                
+        st.markdown("---")
+        st.markdown("**2. Grade student workings**")
+        
+        if "WORKSHEET_MARKER_APP_URL" in st.secrets:
+            st.link_button("🤖 Mark My Worksheet", st.secrets["WORKSHEET_MARKER_APP_URL"], use_container_width=True)
+        else:
+            st.caption("⚠️ Please add WORKSHEET_MARKER_APP_URL to your Streamlit secrets to enable the marking app.")
+
+with col_set:
     with st.popover("⚙️", use_container_width=True):
+        st.write("**Settings**")
         st.radio("Variables", [1, 2, 3], key="var_count", on_change=handle_settings_change)
+        st.radio("Input Method", ["🖌️ Digital Canvas", "📸 Paper & Camera"], key="input_mode", on_change=handle_settings_change)
+
 
 if st.session_state.generating:
     with st.spinner("Generating equations..."):
-        eqs, solutions, vars_list, canvas_height = generate_algebra_problem()
-        st.session_state.math_data = (eqs, solutions, vars_list, canvas_height)
+        eqs, solutions, vars_list, canvas_height, solution_steps = generate_algebra_problem()
+        st.session_state.math_data = (eqs, solutions, vars_list, canvas_height, solution_steps)
         st.session_state.bg_image = draw_equations(eqs, canvas_height)
         
         st.session_state.ai_feedback = ""
@@ -192,10 +307,8 @@ if st.session_state.generating:
         st.rerun()
 
 else:
-    eqs, solutions, vars_list, canvas_height = st.session_state.math_data
+    eqs, solutions, vars_list, canvas_height, solution_steps = st.session_state.math_data
     sol_str = ", ".join([f"{k} = {v}" for k, v in solutions.items()])
-    
-    st.radio("Input Method:", ["🖌️ Digital Canvas", "📸 Paper & Camera"], key="input_mode", horizontal=True)
 
     if st.session_state.input_mode == "🖌️ Digital Canvas":
         current_color_hex = PEN_COLORS[st.session_state.color_index]
@@ -306,6 +419,8 @@ else:
                             st.session_state.is_correct = False
                             st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text)
                             st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
+                        
+                        st.session_state.scroll_to_top = True
                         st.rerun()
                     except Exception as e:
                         st.error(f"Oops! The tutor had a glitch: {e}")
@@ -346,6 +461,8 @@ else:
                         else:
                             st.session_state.is_correct = False
                             st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text)
+                            
+                        st.session_state.scroll_to_top = True
                         st.rerun()
                     except Exception as e:
                         st.error(f"Oops! The tutor had a glitch: {e}")
@@ -360,4 +477,5 @@ else:
     st.write("")
     if st.button("Give me a new problem!", use_container_width=True):
         st.session_state.generating = True
+        st.session_state.scroll_to_top = True
         st.rerun()
