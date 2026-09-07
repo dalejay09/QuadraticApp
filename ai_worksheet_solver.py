@@ -21,6 +21,13 @@ class SolutionRow(BaseModel):
 class WorksheetSolutions(BaseModel):
     solutions: list[SolutionRow]
 
+# --- PDF Text Cleaner ---
+def strip_latex_for_pdf(text):
+    # Removes LaTeX syntax so the PDF remains highly readable plain-text
+    text = text.replace("$$", "").replace("\\begin{aligned}", "").replace("\\end{aligned}", "")
+    text = text.replace("&=", "=").replace("\\\\", "\n")
+    return text.strip()
+
 # --- PDF Generation ---
 def create_solutions_pdf(solutions):
     buffer = io.BytesIO()
@@ -53,9 +60,11 @@ def create_solutions_pdf(solutions):
                 y_pos = 0.95
             
             # Format the text block
+            clean_steps = strip_latex_for_pdf(steps)
+            
             block = (
                 f"**{q_id}**: {prob}\n"
-                f"Steps: {steps}\n"
+                f"Steps:\n{clean_steps}\n"
                 f"Answer: {ans}"
             )
             
@@ -63,7 +72,7 @@ def create_solutions_pdf(solutions):
             block_clean = block.replace("**", "")
             
             ax.text(0.05, y_pos, block_clean, fontsize=10, va='top', wrap=True)
-            y_pos -= 0.18  # Step down for the next problem
+            y_pos -= 0.22  # Step down for the next problem (slightly increased to handle multiline steps)
             
         pdf.savefig(fig)
         plt.close(fig)
@@ -102,10 +111,20 @@ if worksheet_file:
                 You are an expert math solver. Look at the provided image of a worksheet.
                 Extract every distinct math problem you can find. 
                 For each problem, solve it step-by-step.
-                Please provide concise mathematical notation. 
-                For algebra solutions label equations Eq1, Eq2 etc if they are used in workings.
-                Use shortcut notation like "sub z into Eq2" and "Eq1 + 2xEq2" for combinations and eliminations.
-                Use newlines to aid in layout.
+                
+                CRITICAL FORMATTING INSTRUCTION: 
+                You must format all mathematical equations and multi-step workings inside the 'steps' field using LaTeX aligned blocks wrapped in double dollar signs. 
+                Align the equals signs using the '&' character. 
+                Example format for the 'steps' field:
+                "First, substitute the variables:
+                $$
+                \\begin{aligned}
+                3x + 2y &= 10 \\\\
+                3x &= 10 - 2y \\\\
+                x &= \\frac{10 - 2y}{3}
+                \\end{aligned}
+                $$"
+                
                 Return the output STRICTLY adhering to the provided JSON schema.
                 """
                 
@@ -131,17 +150,6 @@ if worksheet_file:
 if st.session_state.solutions_data:
     st.success("✅ Solutions generated successfully!")
     
-    # Render as an HTML Table for clean web display
-    html_table = """
-    <table style="width:100%; border-collapse: collapse; font-family: sans-serif;">
-        <tr style="background-color: #f0f2f6; border-bottom: 2px solid #d1d5db;">
-            <th style="padding: 10px; text-align: left;">Q#</th>
-            <th style="padding: 10px; text-align: left;">Problem</th>
-            <th style="padding: 10px; text-align: left;">Steps</th>
-            <th style="padding: 10px; text-align: left;">Final Answer</th>
-        </tr>
-    """
-    
     for row in st.session_state.solutions_data:
         # 1. Safely extract data whether the SDK returned a Dictionary or a Pydantic Object
         if isinstance(row, dict):
@@ -155,16 +163,13 @@ if st.session_state.solutions_data:
             steps = str(getattr(row, "steps", ""))
             ans = str(getattr(row, "final_answer", ""))
             
-        # 2. Apply superscripts now that we guarantee everything is a clean string
-        steps_html = re.sub(r'\^(\d+)', r'<sup>\1</sup>', steps)
-        ans_html = re.sub(r'\^(\d+)', r'<sup>\1</sup>', ans)
-        
-        # 3. Flatten the HTML to a single line to avoid Streamlit Markdown code blocks
-        html_table += f"<tr style='border-bottom: 1px solid #e5e7eb;'><td style='padding: 10px;'><b>{q_id}</b></td><td style='padding: 10px;'>{prob}</td><td style='padding: 10px;'>{steps_html}</td><td style='padding: 10px; font-weight: bold; color: #007AFF;'>{ans_html}</td></tr>"
-        
-    html_table += "</table>"
-    
-    st.markdown(html_table, unsafe_allow_html=True)
+        # 2. Render using native Streamlit Markdown (which natively supports LaTeX)
+        with st.container(border=True):
+            st.markdown(f"### {q_id}: {prob}")
+            st.markdown("**Solution Steps:**")
+            st.markdown(steps)  # The LaTeX alignment renders beautifully here
+            st.markdown(f"**Final Answer:** {ans}")
+            
     st.write("---")
     
     # PDF Download Button
