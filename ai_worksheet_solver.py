@@ -155,14 +155,8 @@ if st.session_state.solutions_data:
         steps_html = re.sub(r'\^(\d+)', r'<sup>\1</sup>', steps)
         ans_html = re.sub(r'\^(\d+)', r'<sup>\1</sup>', ans)
         
-        html_table += f"""
-        <tr style="border-bottom: 1px solid #e5e7eb;">
-            <td style="padding: 10px;"><b>{q_id}</b></td>
-            <td style="padding: 10px;">{prob}</td>
-            <td style="padding: 10px;">{steps_html}</td>
-            <td style="padding: 10px; font-weight: bold; color: #007AFF;">{ans_html}</td>
-        </tr>
-        """
+        # 3. Flatten the HTML to a single line to avoid Streamlit Markdown code blocks
+        html_table += f"<tr style='border-bottom: 1px solid #e5e7eb;'><td style='padding: 10px;'><b>{q_id}</b></td><td style='padding: 10px;'>{prob}</td><td style='padding: 10px;'>{steps_html}</td><td style='padding: 10px; font-weight: bold; color: #007AFF;'>{ans_html}</td></tr>"
         
     html_table += "</table>"
     
