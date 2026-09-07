@@ -35,13 +35,14 @@ class SolutionRow(BaseModel):
 class AIWorksheetSolutions(BaseModel):
     solutions: list[SolutionRow]
 
-# --- Configuration ---
+# --- Configuration & CSS Layout Hacks ---
 st.set_page_config(page_title="Algebra 101", page_icon="🧮", layout="centered")
 PEN_COLORS = ["#1E90FF", "#FF2400", "#32CD32", "#9400D3", "#FF8C00"]
 COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
 
 st.markdown("""
     <style>
+    /* Primary Button Styling */
     button[kind="primary"] {
         background-color: #007AFF !important;
         border-color: #007AFF !important;
@@ -51,6 +52,11 @@ st.markdown("""
         background-color: #0056b3 !important;
         border-color: #0056b3 !important;
     }
+    
+    /* Toolbar Tightening Hacks */
+    .stRadio > div { gap: 0rem; }
+    [data-testid="stHorizontalBlock"] { gap: 0.5rem; align-items: center; }
+    div[data-testid="stToolbar"] { display: none; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -60,7 +66,6 @@ def get_valid_vars(count):
     return sorted(random.sample(valid_chars, count))
 
 def fmt_expr(coefs, v_list):
-    # Formats equations as a single plain-text string (used for AI and PDF)
     terms = []
     for c, v in zip(coefs, v_list):
         if c == 0: continue
@@ -71,7 +76,6 @@ def fmt_expr(coefs, v_list):
     return " ".join(terms) if terms else "0"
 
 def build_canvas_row(coefs, v_list, rhs):
-    # Formats equations into strict matrix columns for perfect visual alignment
     row = []
     has_prev = False
     for c, v in zip(coefs, v_list):
@@ -85,7 +89,6 @@ def build_canvas_row(coefs, v_list, rhs):
                 has_prev = True
             else:
                 sign = "+" if c > 0 else "-"
-                # '\,' adds a tiny typographic math-space so signs don't crash into numbers
                 row.append(f"{sign}\\,{val_str}{v}") 
                 
     row.append("=")
@@ -121,7 +124,7 @@ def generate_algebra_problem(override_var_count=None):
         
         eq_str = f"{lhs} = {rhs}"
         fallback = f"1. Group terms: {a-c}{v} = {d-b}\n2. Solve: {v} = {ans}"
-        canvas_eqs = [[eq_str]] # Single variable doesn't need column alignment
+        canvas_eqs = [[eq_str]] 
         
         return [eq_str], {v: ans}, vars, 450, fallback, canvas_eqs
 
@@ -291,27 +294,17 @@ def draw_equations(canvas_eqs, height_px):
     for i, row in enumerate(canvas_eqs):
         y = y_start - i * y_step
         if len(row) == 1:
-            # 1 Variable (Center aligned standard string)
             ax.text(0.5, y, f"${row[0]}$", fontsize=font_size, ha='center', va='top')
         else:
-            # Matrix alignment for 2 or 3 Variables
             num_vars = len(row) - 2
-            
             if num_vars == 2:
-                x_coords = [0.38, 0.58] # Right-aligned variables
-                x_eq = 0.65             # Centered equals
-                x_rhs = 0.70            # Left-aligned answer
+                x_coords = [0.38, 0.58]; x_eq = 0.65; x_rhs = 0.70            
             else:
-                x_coords = [0.26, 0.46, 0.66] 
-                x_eq = 0.72             
-                x_rhs = 0.77            
+                x_coords = [0.26, 0.46, 0.66]; x_eq = 0.72; x_rhs = 0.77            
 
-            # Draw Variable Columns
             for j in range(num_vars):
-                if row[j]: 
-                    ax.text(x_coords[j], y, f"${row[j]}$", fontsize=font_size, ha='right', va='top')
+                if row[j]: ax.text(x_coords[j], y, f"${row[j]}$", fontsize=font_size, ha='right', va='top')
             
-            # Draw Equals and RHS
             ax.text(x_eq, y, "$=$", fontsize=font_size, ha='center', va='top')
             ax.text(x_rhs, y, f"${row[-1]}$", fontsize=font_size, ha='left', va='top')
     
@@ -326,13 +319,13 @@ if 'generating' not in st.session_state: st.session_state.generating = True
 if 'ai_feedback' not in st.session_state: st.session_state.ai_feedback = ""
 if 'canvas_key' not in st.session_state: st.session_state.canvas_key = 0 
 if 'var_count' not in st.session_state: st.session_state.var_count = 1
-if 'input_mode' not in st.session_state: st.session_state.input_mode = "🖌️ Digital Canvas"
 if 'color_index' not in st.session_state: st.session_state.color_index = 0
 if 'stroke_history' not in st.session_state: st.session_state.stroke_history = [[]]
 if 'active_initial_drawing' not in st.session_state: st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
 if 'is_correct' not in st.session_state: st.session_state.is_correct = False
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'scroll_to_top' not in st.session_state: st.session_state.scroll_to_top = False
+if 'show_camera_supplement' not in st.session_state: st.session_state.show_camera_supplement = False
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -382,16 +375,12 @@ with col_set:
     with st.popover("⚙️", use_container_width=True):
         st.write("**Settings**")
         st.radio("Variables", [1, 2, 3], key="var_count", on_change=handle_settings_change)
-        st.radio("Input Method", ["🖌️ Digital Canvas", "📸 Paper & Camera"], key="input_mode", on_change=handle_settings_change)
 
 if st.session_state.generating:
     with st.spinner("Generating equations..."):
-        
-        # Unpack the 6-item tuple safely
         if len(st.session_state.get("math_data", [])) == 6:
             eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = generate_algebra_problem()
         else:
-            # Clean generation ensures the new 6-item tuple is created properly
             generation_output = generate_algebra_problem()
             eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = generation_output
             
@@ -401,6 +390,7 @@ if st.session_state.generating:
         st.session_state.ai_feedback = ""
         st.session_state.color_index = 0 
         st.session_state.is_correct = False
+        st.session_state.show_camera_supplement = False
         st.session_state.stroke_history = [[]]
         st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
         st.session_state.canvas_key += 1 
@@ -408,7 +398,6 @@ if st.session_state.generating:
         st.rerun()
 
 else:
-    # Unpack based on updated data architecture
     if len(st.session_state.math_data) == 6:
         eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = st.session_state.math_data
     else:
@@ -416,163 +405,142 @@ else:
         st.rerun()
         
     sol_str = ", ".join([f"{k} = {v}" for k, v in solutions.items()])
+    current_color_hex = PEN_COLORS[st.session_state.color_index]
+    current_color_name = COLOR_NAMES[st.session_state.color_index]
+    
+    st.write(f"Solve for **{', '.join(vars_list)}**! Current pen: **{current_color_name}**")
 
-    if st.session_state.input_mode == "🖌️ Digital Canvas":
-        current_color_hex = PEN_COLORS[st.session_state.color_index]
-        current_color_name = COLOR_NAMES[st.session_state.color_index]
-        st.write(f"Solve for **{', '.join(vars_list)}**! Current pen: **{current_color_name}**")
-
-        tool = st.radio("Tool", ["🖌️ Pen", "🧽 Tap-Eraser"], horizontal=True, label_visibility="collapsed")
-        active_stroke_color = current_color_hex if tool == "🖌️ Pen" else "#FFFFFE"
-        active_stroke_width = 3 if tool == "🖌️ Pen" else 15
-
-        canvas_result = st_canvas(
-            fill_color="rgba(255, 165, 0, 0.3)", 
-            stroke_width=active_stroke_width, 
-            stroke_color=active_stroke_color,
-            background_image=st.session_state.bg_image,
-            update_streamlit=True,
-            height=canvas_height,
-            width=350,
-            drawing_mode="freedraw",
-            return_image_data=True, 
-            initial_drawing=st.session_state.active_initial_drawing, 
-            key=f"canvas_{st.session_state.canvas_key}",
-        )
-
-        col_u, col_c = st.columns(2)
-        with col_u:
-            if st.button("↩️ Undo", use_container_width=True):
-                if len(st.session_state.stroke_history) > 1:
-                    st.session_state.stroke_history.pop()
-                    last_valid = st.session_state.stroke_history[-1]
-                    st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
-                    st.session_state.canvas_key += 1
-                    st.rerun()
-        with col_c:
-            if st.button("🗑️ Clear All", use_container_width=True):
-                st.session_state.stroke_history = [[]]
-                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
-                st.session_state.color_index = 0
+    # --- Tight Unified Toolbar ---
+    t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
+    with t_col1:
+        tool = st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed")
+    with t_col2:
+        if st.button("↩️", use_container_width=True, help="Undo"):
+            if len(st.session_state.stroke_history) > 1:
+                st.session_state.stroke_history.pop()
+                last_valid = st.session_state.stroke_history[-1]
+                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
                 st.session_state.canvas_key += 1
                 st.rerun()
+    with t_col3:
+        if st.button("🗑️", use_container_width=True, help="Clear Canvas"):
+            st.session_state.stroke_history = [[]]
+            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
+            st.session_state.canvas_key += 1
+            st.rerun()
+    with t_col4:
+        if st.button("📸 Paper", use_container_width=True, help="Add a photo of paper workings"):
+            st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
+            st.rerun()
 
-        current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
-        last_saved_objects = st.session_state.stroke_history[-1]
+    active_stroke_color = current_color_hex if tool == "🖌️" else "#FFFFFE"
+    active_stroke_width = 3 if tool == "🖌️" else 15
 
-        if len(current_objects) > len(last_saved_objects):
-            new_stroke = current_objects[-1]
-            if new_stroke.get("stroke", "").upper() == "#FFFFFE":
-                e_obj = new_stroke
-                ew = e_obj.get("width", 0) * e_obj.get("scaleX", 1)
-                eh = e_obj.get("height", 0) * e_obj.get("scaleY", 1)
-                e_left = e_obj.get("left", 0)
-                e_top = e_obj.get("top", 0)
-                
-                pad = 15
-                E_L = e_left - pad; E_R = e_left + ew + pad
-                E_T = e_top - pad; E_B = e_top + eh + pad
-                
-                objects_to_keep = []
-                for obj in last_saved_objects:
-                    ow = obj.get("width", 0) * obj.get("scaleX", 1)
-                    oh = obj.get("height", 0) * obj.get("scaleY", 1)
-                    o_left = obj.get("left", 0); o_top = obj.get("top", 0)
-                    
-                    T_L = o_left; T_R = o_left + ow
-                    T_T = o_top; T_B = o_top + oh
-                    
-                    overlap = not (E_R < T_L or E_L > T_R or E_B < T_T or E_T > T_B)
-                    if not overlap: objects_to_keep.append(obj)
-                
-                st.session_state.stroke_history.append(objects_to_keep)
-                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": objects_to_keep}
-                st.session_state.canvas_key += 1
-                st.rerun()
-            else:
-                st.session_state.stroke_history.append(current_objects.copy())
+    canvas_result = st_canvas(
+        fill_color="rgba(255, 165, 0, 0.3)", 
+        stroke_width=active_stroke_width, 
+        stroke_color=active_stroke_color,
+        background_image=st.session_state.bg_image,
+        update_streamlit=True,
+        height=canvas_height,
+        width=350,
+        drawing_mode="freedraw",
+        return_image_data=True, 
+        initial_drawing=st.session_state.active_initial_drawing, 
+        key=f"canvas_{st.session_state.canvas_key}",
+    )
+    
+    # Custom Eraser Logic
+    current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
+    last_saved_objects = st.session_state.stroke_history[-1]
 
-        st.write("---")
-        
-        if st.button("Check My Answer!", type="primary", use_container_width=True):
-            if canvas_result.image_data is not None:
-                with st.spinner("The AI Tutor is reviewing your algebra..."):
-                    try:
-                        ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
-                        bg = st.session_state.bg_image.convert("RGBA")
-                        if ink_img.size != bg.size:
-                            ink_img = ink_img.resize(bg.size, Image.Resampling.LANCZOS)
-                        final_canvas = Image.alpha_composite(bg, ink_img).convert("RGB")
-                        
-                        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                        prompt = f"""
-                        You are a gentle, encouraging math tutor grading an algebra problem.
-                        The equations provided to the student are: {', '.join(eqs)}
-                        The mathematically correct final solutions are: {sol_str}.
-                        
-                        The student is writing in {current_color_name} ink on a digital canvas. Treat other colors as older mistakes.
-                        1. Look at their step-by-step algebra.
-                        2. If their {current_color_name} final answer is completely correct and explicitly states the final values, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
-                        3. If their {current_color_name} working is incorrect or incomplete, reply EXACTLY with "INCORRECT:" on the first line. Briefly explain where they went wrong, but do not give them the final answer.
-                        """
-                        
-                        response = client.models.generate_content(model='gemini-3.6-flash', contents=[prompt, final_canvas])
-                        resp_text = response.text.strip()
-                        
-                        if resp_text.upper().startswith("CORRECT"):
-                            st.session_state.is_correct = True
-                            st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '', resp_text)
-                        else:
-                            st.session_state.is_correct = False
-                            st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text)
-                            st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
-                        
-                        st.session_state.scroll_to_top = True
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Oops! The tutor had a glitch: {e}")
-
-    else:
-        # Camera Mode UI
-        st.write(f"Solve for **{', '.join(vars_list)}** on paper, then snap a photo!")
-        for eq in eqs:
-            st.latex(eq)
+    if len(current_objects) > len(last_saved_objects):
+        new_stroke = current_objects[-1]
+        if new_stroke.get("stroke", "").upper() == "#FFFFFE":
+            e_obj = new_stroke
+            ew = e_obj.get("width", 0) * e_obj.get("scaleX", 1)
+            eh = e_obj.get("height", 0) * e_obj.get("scaleY", 1)
+            e_left = e_obj.get("left", 0); e_top = e_obj.get("top", 0)
             
-        picture = st.file_uploader("Upload or take a photo of your working:", type=['png', 'jpg', 'jpeg'])
+            pad = 15
+            E_L = e_left - pad; E_R = e_left + ew + pad
+            E_T = e_top - pad; E_B = e_top + eh + pad
+            
+            objects_to_keep = []
+            for obj in last_saved_objects:
+                ow = obj.get("width", 0) * obj.get("scaleX", 1)
+                oh = obj.get("height", 0) * obj.get("scaleY", 1)
+                o_left = obj.get("left", 0); o_top = obj.get("top", 0)
+                T_L = o_left; T_R = o_left + ow
+                T_T = o_top; T_B = o_top + oh
+                overlap = not (E_R < T_L or E_L > T_R or E_B < T_T or E_T > T_B)
+                if not overlap: objects_to_keep.append(obj)
+            
+            st.session_state.stroke_history.append(objects_to_keep)
+            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": objects_to_keep}
+            st.session_state.canvas_key += 1
+            st.rerun()
+        else:
+            st.session_state.stroke_history.append(current_objects.copy())
+
+    # --- Unified AI Processing ---
+    camera_picture = None
+    if st.session_state.show_camera_supplement:
+        camera_picture = st.file_uploader("Upload or snap a photo of your paper workings:", type=['png', 'jpg', 'jpeg'])
+
+    st.write("---")
+    if st.button("Check My Answer!", type="primary", use_container_width=True):
+        payload_images = []
         
-        if picture:
-            if st.button("Check My Answer!", type="primary", use_container_width=True):
-                with st.spinner("The AI Tutor is reading your paper..."):
-                    try:
-                        img = Image.open(picture).convert('RGB')
-                        img.thumbnail((1024, 1024))
-                        
-                        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                        prompt = f"""
-                        You are a gentle, encouraging math tutor grading an algebra problem.
-                        The equations provided to the student are: {', '.join(eqs)}
-                        The mathematically correct final solutions are: {sol_str}.
-                        
-                        The student has uploaded a photo of their handwritten working.
-                        1. Look at their step-by-step algebra.
-                        2. If their final answer is completely correct and explicitly states the final values, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
-                        3. If their working is incorrect or incomplete, reply EXACTLY with "INCORRECT:" on the first line. Briefly explain where they went wrong, but do not give them the final answer.
-                        """
-                        
-                        response = client.models.generate_content(model='gemini-3.6-flash', contents=[prompt, img])
-                        resp_text = response.text.strip()
-                        
-                        if resp_text.upper().startswith("CORRECT"):
-                            st.session_state.is_correct = True
-                            st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '', resp_text)
-                        else:
-                            st.session_state.is_correct = False
-                            st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text)
-                            
-                        st.session_state.scroll_to_top = True
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Oops! The tutor had a glitch: {e}")
+        # 1. Grab Canvas Ink (if any exists)
+        if canvas_result.image_data is not None and len(st.session_state.stroke_history[-1]) > 0:
+            ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
+            bg = st.session_state.bg_image.convert("RGBA")
+            if ink_img.size != bg.size:
+                ink_img = ink_img.resize(bg.size, Image.Resampling.LANCZOS)
+            final_canvas = Image.alpha_composite(bg, ink_img).convert("RGB")
+            payload_images.append(final_canvas)
+            
+        # 2. Grab Paper Photo (if provided)
+        if camera_picture:
+            paper_img = Image.open(camera_picture).convert('RGB')
+            paper_img.thumbnail((1024, 1024))
+            payload_images.append(paper_img)
+            
+        if not payload_images:
+            st.error("Please draw your workings on the canvas or snap a photo first!")
+        else:
+            with st.spinner("The AI Tutor is reviewing your workings..."):
+                try:
+                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                    prompt = f"""
+                    You are a gentle, encouraging math tutor grading an algebra problem.
+                    The equations provided to the student are: {', '.join(eqs)}
+                    The mathematically correct final solutions are: {sol_str}.
+                    
+                    The student has provided their workings as images. This might be a digital drawing, a photo of paper, or both.
+                    Please check all provided images. For the digital canvas, they are writing in {current_color_name} ink. Treat other colors as older mistakes.
+                    
+                    1. Look at their step-by-step algebra across all images.
+                    2. If their final answer is completely correct and explicitly states the final values, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
+                    3. If their working is incorrect or incomplete, reply EXACTLY with "INCORRECT:" on the first line. Briefly explain where they went wrong, but do not give them the final answer.
+                    """
+                    
+                    response = client.models.generate_content(model='gemini-3.6-flash', contents=[prompt] + payload_images)
+                    resp_text = response.text.strip()
+                    
+                    if resp_text.upper().startswith("CORRECT"):
+                        st.session_state.is_correct = True
+                        st.session_state.ai_feedback = re.sub(r'(?i)^CORRECT:?\s*', '', resp_text)
+                    else:
+                        st.session_state.is_correct = False
+                        st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text)
+                        st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
+                    
+                    st.session_state.scroll_to_top = True
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Oops! The tutor had a glitch: {e}")
 
     # Render Feedback
     if st.session_state.ai_feedback:
