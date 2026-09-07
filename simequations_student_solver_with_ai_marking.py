@@ -319,6 +319,7 @@ if 'generating' not in st.session_state: st.session_state.generating = True
 if 'ai_feedback' not in st.session_state: st.session_state.ai_feedback = ""
 if 'canvas_key' not in st.session_state: st.session_state.canvas_key = 0 
 if 'var_count' not in st.session_state: st.session_state.var_count = 1
+if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
 if 'color_index' not in st.session_state: st.session_state.color_index = 0
 if 'stroke_history' not in st.session_state: st.session_state.stroke_history = [[]]
 if 'active_initial_drawing' not in st.session_state: st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
@@ -375,6 +376,7 @@ with col_set:
     with st.popover("⚙️", use_container_width=True):
         st.write("**Settings**")
         st.radio("Variables", [1, 2, 3], key="var_count", on_change=handle_settings_change)
+        st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
 
 if st.session_state.generating:
     with st.spinner("Generating equations..."):
@@ -486,7 +488,11 @@ else:
     # --- Unified AI Processing ---
     camera_picture = None
     if st.session_state.show_camera_supplement:
-        camera_picture = st.file_uploader("Upload or snap a photo of your paper workings:", type=['png', 'jpg', 'jpeg'])
+        cam_mode = st.session_state.get('camera_mode', 'App')
+        if cam_mode == 'App':
+            camera_picture = st.camera_input("Snap a photo of your working:")
+        else:
+            camera_picture = st.file_uploader("Upload or snap a photo of your paper workings:", type=['png', 'jpg', 'jpeg'])
 
     st.write("---")
     if st.button("Check My Answer!", type="primary", use_container_width=True):
