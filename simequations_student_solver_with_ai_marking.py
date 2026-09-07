@@ -5,13 +5,14 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import random
 import string
-import math
 import io
+import json
 import re
 import base64
 from PIL import Image
 from datetime import datetime
 from google import genai
+from pydantic import BaseModel, Field
 import streamlit.components.v1 as components
 
 # --- THE ULTIMATE MONKEY PATCH ---
@@ -26,12 +27,19 @@ streamlit_drawable_canvas.image_to_url = b64_image_to_url
 from streamlit_drawable_canvas import st_canvas
 # ---------------------------------
 
+# --- AI Output Schemas ---
+class SolutionRow(BaseModel):
+    q_num: int = Field(description="The question number (1 to 20)")
+    steps: str = Field(description="Step-by-step solving method (plain text, no latex blocks, use basic newlines)")
+
+class AIWorksheetSolutions(BaseModel):
+    solutions: list[SolutionRow]
+
 # --- Configuration ---
 st.set_page_config(page_title="Algebra 101", page_icon="🧮", layout="centered")
 PEN_COLORS = ["#1E90FF", "#FF2400", "#32CD32", "#9400D3", "#FF8C00"]
 COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
 
-# --- Custom CSS ---
 st.markdown("""
     <style>
     button[kind="primary"] {
@@ -90,13 +98,9 @@ def generate_algebra_problem(override_var_count=None):
         
         eq_str = f"{lhs} = {rhs}"
         
-        steps = [
-            f"1. Group {v} terms: {a}{v} - {c}{v} = {d} - {b}",
-            f"2. Simplify: {a-c}{v} = {d-b}",
-            f"3. Solve: {v} = {ans}"
-        ]
-        
-        return [eq_str], {v: ans}, vars, 450, steps
+        # Fallback step (used if AI fails)
+        fallback = f"1. Group terms: {a-c}{v} = {d-b}\n2. Solve: {v} = {ans}"
+        return [eq_str], {v: ans}, vars, 450, fallback
 
     elif var_count == 2:
         v1, v2 = vars
@@ -115,13 +119,8 @@ def generate_algebra_problem(override_var_count=None):
         eq1 = f"{fmt_expr([a1, b1], vars)} = {c1}"
         eq2 = f"{fmt_expr([a2, b2], vars)} = {c2}"
         
-        steps = [
-            f"**Solution:** {v1} = {ans1}, {v2} = {ans2}",
-            f"**Check Eq 1:** {a1}({ans1}) + {b1}({ans2}) = {c1}",
-            f"**Check Eq 2:** {a2}({ans1}) + {b2}({ans2}) = {c2}"
-        ]
-        
-        return [eq1, eq2], {v1: ans1, v2: ans2}, vars, 650, steps
+        fallback = f"Solution: {v1} = {ans1}, {v2} = {ans2}\n(Check via substitution)"
+        return [eq1, eq2], {v1: ans1, v2: ans2}, vars, 650, fallback
 
     elif var_count == 3:
         v1, v2, v3 = vars
@@ -147,20 +146,53 @@ def generate_algebra_problem(override_var_count=None):
         eq2 = f"{fmt_expr(r2, vars)} = {c2}"
         eq3 = f"{fmt_expr(r3, vars)} = {c3}"
         
-        steps = [
-            f"**Solution:** {v1} = {ans1}, {v2} = {ans2}, {v3} = {ans3}",
-            f"**Check Eq 1:** {r1[0]}({ans1}) + {r1[1]}({ans2}) + {r1[2]}({ans3}) = {c1}",
-            f"**Check Eq 2:** {r2[0]}({ans1}) + {r2[1]}({ans2}) + {r2[2]}({ans3}) = {c2}",
-            f"**Check Eq 3:** {r3[0]}({ans1}) + {r3[1]}({ans2}) + {r3[2]}({ans3}) = {c3}"
-        ]
-        
-        return [eq1, eq2, eq3], {v1: ans1, v2: ans2, v3: ans3}, vars, 800, steps
+        fallback = f"Solution: {v1}={ans1}, {v2}={ans2}, {v3}={ans3}\n(Check via substitution)"
+        return [eq1, eq2, eq3], {v1: ans1, v2: ans2, v3: ans3}, vars, 800, fallback
 
-# --- PDF Generation Engine ---
+# --- Integrated AI-PDF Generation Engine ---
 def create_pdf_bytes(var_count):
     buffer = io.BytesIO()
     with PdfPages(buffer) as pdf:
         problems = [generate_algebra_problem(var_count) for _ in range(20)]
+        ai_steps = {}
+        
+        # Call AI to generate human-readable solutions in bulk
+        try:
+            client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+            
+            payload = ""
+            for i, p in enumerate(problems):
+                eq_str = " ; ".join(p[0])
+                ans_str = ", ".join([f"{k}={v}" for k,v in p[1].items()])
+                payload += f"Q{i+1}: Equations: [{eq_str}] | Correct Answer: [{ans_str}]\n"
+            
+            prompt = f"""
+            You are an expert math tutor. I generated a worksheet with {var_count}-variable algebra problems.
+            I already know the equations and correct answers. 
+            Write the concise, human-readable step-by-step solution method for each problem (e.g., elimination or substitution).
+            Keep it very brief (under 50 words per question) so it fits on a printed page. 
+            Do NOT use markdown bolding or latex formats, use plain text formatting.
+            
+            Data:
+            {payload}
+            """
+            
+            response = client.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=[prompt],
+                config=dict(
+                    response_mime_type="application/json",
+                    response_schema=AIWorksheetSolutions,
+                    temperature=0.1
+                )
+            )
+            
+            ai_data = json.loads(response.text).get("solutions", [])
+            for item in ai_data:
+                ai_steps[item["q_num"]] = item["steps"].replace("**", "")
+                
+        except Exception as e:
+            print(f"Background AI Solver failed, using fallback: {e}")
         
         # Page 1: Questions
         fig, axes = plt.subplots(figsize=(8.27, 11.69))
@@ -185,7 +217,8 @@ def create_pdf_bytes(var_count):
             ax_ans.text(0.55, 0.88 - (i*0.085), f"Q{i+11}: {ans_R}", fontsize=11, va='top')
         pdf.savefig(fig_ans); plt.close(fig_ans)
 
-        # Page 3+: Appendix (Solutions)
+        # Page 3+: AI Generated Solutions Appendix
+        # 5 questions per column, 10 per page
         for page_idx in range(2):
             fig_app, ax_app = plt.subplots(figsize=(8.27, 11.69))
             ax_app.axis('off')
@@ -193,13 +226,18 @@ def create_pdf_bytes(var_count):
             
             offset = page_idx * 10
             for i in range(5):
-                prob_L = problems[offset + i]
-                txt_L = f"Q{offset + i + 1}:\n" + "\n".join(prob_L[0]) + "\n\n" + "\n".join(prob_L[4])
-                ax_app.text(0.05, 0.88 - (i*0.17), txt_L, fontsize=9, va='top')
+                q_id_L = offset + i + 1
+                prob_L = problems[q_id_L - 1]
+                step_L = ai_steps.get(q_id_L, prob_L[4]) # Uses AI if available, else fallback
+                txt_L = f"Q{q_id_L}:\n" + "\n".join(prob_L[0]) + "\n\n" + step_L
+                ax_app.text(0.05, 0.88 - (i*0.17), txt_L, fontsize=8, va='top', wrap=True)
                 
-                prob_R = problems[offset + i + 5]
-                txt_R = f"Q{offset + i + 6}:\n" + "\n".join(prob_R[0]) + "\n\n" + "\n".join(prob_R[4])
-                ax_app.text(0.55, 0.88 - (i*0.17), txt_R, fontsize=9, va='top')
+                q_id_R = offset + i + 6
+                prob_R = problems[q_id_R - 1]
+                step_R = ai_steps.get(q_id_R, prob_R[4])
+                txt_R = f"Q{q_id_R}:\n" + "\n".join(prob_R[0]) + "\n\n" + step_R
+                ax_app.text(0.55, 0.88 - (i*0.17), txt_R, fontsize=8, va='top', wrap=True)
+                
             pdf.savefig(fig_app); plt.close(fig_app)
             
     return buffer.getvalue()
@@ -224,7 +262,6 @@ def draw_equations(eqs, height_px):
     fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
     plt.close(fig)
     buf.seek(0)
-    
     return Image.open(buf).convert('RGBA').copy()
 
 # --- Memory Stack Initialization ---
@@ -259,7 +296,7 @@ with col_actions:
         
         if st.session_state.pdf_bytes is None:
             if st.button("⚙️ Generate Worksheet PDF", use_container_width=True):
-                with st.spinner("Compiling Master PDF..."):
+                with st.spinner("Compiling Master PDF & generating AI solution paths (takes ~10s)..."):
                     st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.var_count)
                 st.rerun()
         else:
@@ -290,11 +327,10 @@ with col_set:
         st.radio("Variables", [1, 2, 3], key="var_count", on_change=handle_settings_change)
         st.radio("Input Method", ["🖌️ Digital Canvas", "📸 Paper & Camera"], key="input_mode", on_change=handle_settings_change)
 
-
 if st.session_state.generating:
     with st.spinner("Generating equations..."):
-        eqs, solutions, vars_list, canvas_height, solution_steps = generate_algebra_problem()
-        st.session_state.math_data = (eqs, solutions, vars_list, canvas_height, solution_steps)
+        eqs, solutions, vars_list, canvas_height, fallback = generate_algebra_problem()
+        st.session_state.math_data = (eqs, solutions, vars_list, canvas_height, fallback)
         st.session_state.bg_image = draw_equations(eqs, canvas_height)
         
         st.session_state.ai_feedback = ""
@@ -307,7 +343,7 @@ if st.session_state.generating:
         st.rerun()
 
 else:
-    eqs, solutions, vars_list, canvas_height, solution_steps = st.session_state.math_data
+    eqs, solutions, vars_list, canvas_height, fallback = st.session_state.math_data
     sol_str = ", ".join([f"{k} = {v}" for k, v in solutions.items()])
 
     if st.session_state.input_mode == "🖌️ Digital Canvas":
