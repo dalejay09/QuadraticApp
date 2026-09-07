@@ -3,7 +3,6 @@ import io
 from PIL import Image
 from google import genai
 from pydantic import BaseModel
-from typing import list
 from datetime import datetime
 from fpdf import FPDF
 
