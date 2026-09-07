@@ -117,19 +117,7 @@ def generate_quadratic_data():
                  f"6. Substitute $a = {fmt_num(a)}$ back into Eq. 2:\n"
                  f"$\\quad {fmt_num(a)} {'+' if px2 > 0 else '-'} b = {fmt_num(Y2)} \\Rightarrow b = {b}$\n\n"
                  f"**${eq}$**")
-        
         correct = ['Standard']
-        
-        # DYNAMIC CHECK: If random points gave us special features, they are more efficient!
-        if sum(1 for p in points if p[1] == 0) >= 2:
-            correct.append('Intercept')
-            
-        vx = -b / (2 * a)
-        if any(p[0] == vx for p in points):
-            correct.append('Vertex')
-            
-        if len(correct) > 1:
-            correct.remove('Standard')
 
     elif form == 'equal_both':
         h = random.randint(-3, 3)
@@ -214,6 +202,7 @@ def generate_linear_data():
         y1 = m * x1 + c
         points = [(x1, y1)]
 
+    # Sort points for visual consistency (left to right)
     if len(points) == 2 and points[0][0] > points[1][0]:
         points[0], points[1] = points[1], points[0]
         x1, y1 = points[0]
@@ -224,6 +213,7 @@ def generate_linear_data():
     c_str = "" if c == 0 else f" + {fmt_num(c)}" if c > 0 else f" - {fmt_num(abs(c))}"
     eq = f"y = {m_str}x{c_str}"
     
+    # Step-by-step logic
     if scenario == 'point_grad':
         steps = (f"**Straight Line Equation**\n\n"
                  f"1. Gradient $m = {fmt_num(m)}$ (given).\n"
@@ -245,6 +235,7 @@ def generate_linear_data():
     x_pad, y_pad = max(2.0, (max(all_x) - min(all_x)) * 0.2), max(2.0, (max(all_y) - min(all_y)) * 0.2)
     x_vals = np.linspace(min(all_x) - x_pad - 2, max(all_x) + x_pad + 2, 400)
     
+    # Exhaustive Feature Identification Logic
     all_features = [
         "positive gradient", "negative gradient", 
         "x-intercept given", "y-intercept given", 
@@ -282,12 +273,10 @@ def draw_parabola_fig(math_data, show_labels_val, show_grid_val):
         ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
         ax.grid(True, linestyle=':', alpha=0.6)
         ax.set_axisbelow(True)
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
+        ax.set_xticklabels([]); ax.set_yticklabels()
         ax.tick_params(which='both', length=0)
     else:
-        ax.set_xticks([])
-        ax.set_yticks([])
+        ax.set_xticks([]); ax.set_yticks([])
 
     ax.plot(x_vals, f(x_vals), color='darkgreen', linewidth=2)
     for px, py in points:
@@ -317,12 +306,10 @@ def draw_line_fig(math_data, show_labels_val, show_grid_val):
         ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
         ax.grid(True, linestyle=':', alpha=0.6)
         ax.set_axisbelow(True)
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
+        ax.set_xticklabels([]); ax.set_yticklabels([])
         ax.tick_params(which='both', length=0)
     else:
-        ax.set_xticks([])
-        ax.set_yticks([])
+        ax.set_xticks([]); ax.set_yticks([])
 
     ax.plot(x_vals, f(x_vals), color='darkblue', linewidth=2)
     for px, py in points:
@@ -526,103 +513,67 @@ def create_pdf_bytes(mode, show_grid_pdf):
         
     return buffer.getvalue()
 
-
 # --- Streamlit UI Initializations ---
-if 'initialized_study_mode' not in st.session_state:
-    st.session_state.study_mode = "Solve"
-    st.session_state.mark_working = True
-    st.session_state.show_coordinates = True
-    st.session_state.show_grid = True
-    st.session_state.show_equations = True
-    st.session_state.initialized_study_mode = True
-
-def apply_study_mode():
-    st.session_state.pdf_bytes = None
-    st.session_state.generating = True
-    sm = st.session_state.study_mode
-    if sm == "Recognise":
-        st.session_state.show_grid = False
-        st.session_state.mark_working = False
-    elif sm == "Solve":
-        st.session_state.show_grid = True
-        st.session_state.mark_working = True
-        st.session_state.show_coordinates = True
-        st.session_state.show_equations = True
-
 def handle_settings_change():
     st.session_state.pdf_bytes = None
     st.session_state.generating = True
 
-if 'generating' not in st.session_state:
-    st.session_state.generating = True
-if 'identified_correctly' not in st.session_state:
-    st.session_state.identified_correctly = False
-if 'ai_feedback' not in st.session_state:
-    st.session_state.ai_feedback = ""
-if 'ai_is_correct' not in st.session_state:
-    st.session_state.ai_is_correct = False
-if 'show_camera' not in st.session_state:
-    st.session_state.show_camera = False
-if 'pdf_bytes' not in st.session_state:
-    st.session_state.pdf_bytes = None
-    
-st.title("Student Graph Solver")
+if 'generating' not in st.session_state: st.session_state.generating = True
+if 'identified_correctly' not in st.session_state: st.session_state.identified_correctly = False
+if 'ai_feedback' not in st.session_state: st.session_state.ai_feedback = ""
+if 'ai_is_correct' not in st.session_state: st.session_state.ai_is_correct = False
+if 'show_camera' not in st.session_state: st.session_state.show_camera = False
+if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 
-# Custom CSS to make primary buttons a friendly, calming blue
-st.markdown("""
-    <style>
-    div.stButton > button[kind="primary"] {
-        background-color: #1E90FF; /* Dodger Blue */
-        color: white;
-        border: none;
-    }
-    div.stButton > button[kind="primary"]:hover {
-        background-color: #0073e6; /* Slightly darker blue on hover */
-        border: none;
-    }
-    </style>
-""", unsafe_allow_html=True)
+st.title("Graphing Equation Finder")
 
-# Helper function to render identical settings cog in both layout states
-def render_settings_cog():
+# 1. Top Bar: Actions & Settings 
+col_actions, col_set = st.columns([5, 1])
+with col_actions:
+    with st.popover("📄 Worksheet Actions", use_container_width=True):
+        st.markdown("**1. Create a physical worksheet**")
+        
+        if st.session_state.pdf_bytes is None:
+            if st.button("⚙️ Generate Worksheet PDF", use_container_width=True):
+                with st.spinner("Compiling Master PDF..."):
+                    st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.get('func_mode', 'Both'), st.session_state.get('show_grid', False))
+                st.rerun()
+        else:
+            current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button(
+                label="⬇️ Download Worksheet (PDF)",
+                data=st.session_state.pdf_bytes,
+                file_name=f"Math_Master_Worksheet_{current_time}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary"
+            )
+            if st.button("🗑️ Clear / Reset PDF", use_container_width=True):
+                st.session_state.pdf_bytes = None
+                st.rerun()
+                
+        st.markdown("---")
+        st.markdown("**2. Grade student workings**")
+        
+        # Link dynamically to the secure URL 
+        if "WORKSHEET_MARKER_APP_URL" in st.secrets:
+            st.link_button("🤖 Mark My Worksheet", st.secrets["WORKSHEET_MARKER_APP_URL"], use_container_width=True)
+        else:
+            st.caption("⚠️ Please add WORKSHEET_MARKER_APP_URL to your Streamlit secrets to enable the marking app.")
+
+with col_set:
     with st.popover("⚙️", use_container_width=True):
         st.write("**Settings**")
-        st.radio("Study Mode", ["Recognise", "Solve"], key="study_mode", on_change=apply_study_mode)
         st.radio("Function Mode", ["Quadratic", "Linear", "Both"], key="func_mode", on_change=handle_settings_change)
-        st.toggle("Mark My Working", key="mark_working")
-        st.toggle("Show Coordinates", key="show_coordinates", on_change=handle_settings_change)
         st.toggle("Show Grid Lines", key="show_grid", on_change=handle_settings_change)
-        st.toggle("Equation Buttons", key="show_equations")
-        st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
+        st.toggle("Mark My Working", key="mark_working")
 
-# 1. PDF Controls & Settings Layout
-if st.session_state.pdf_bytes is None:
-    col_pdf, col_set = st.columns([5, 1])
-    with col_pdf:
-        if st.button("📄 Prepare Worksheet", use_container_width=True):
-            with st.spinner("Compiling Master PDF..."):
-                st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.get('func_mode', 'Both'), st.session_state.get('show_grid', False))
-            st.rerun()
-    with col_set:
-        render_settings_cog()
-else:
-    col_dl, col_rs, col_set = st.columns([3, 3, 1])
-    with col_dl:
-        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        st.download_button(
-            label="⬇️ Download",
-            data=st.session_state.pdf_bytes,
-            file_name=f"Math_Master_Worksheet_{current_time}.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-            type="primary"
-        )
-    with col_rs:
-        if st.button("Reset PDF", use_container_width=True):
-            st.session_state.pdf_bytes = None
-            st.rerun()
-    with col_set:
-        render_settings_cog()
+# 2. Main App Content 
+col_toggle1, col_toggle2 = st.columns(2)
+with col_toggle1:
+    show_labels = st.toggle("Coordinates", value=False)
+with col_toggle2:
+    show_equations = st.toggle("Equation Buttons", value=False) 
 
 st.latex(r"") 
 
@@ -653,19 +604,17 @@ if st.session_state.generating:
     
 else:
     prob_type = st.session_state.current_prob_type
-    show_labels_state = st.session_state.get('show_coordinates', True)
-    show_equations_state = st.session_state.get('show_equations', True)
     
     # Dynamic Heading
     if prob_type == 'Quadratic':
         st.write("Which general form is most efficient for this parabola?")
-        fig = draw_parabola_fig(st.session_state.math_data, show_labels_state, st.session_state.get("show_grid", False))
+        fig = draw_parabola_fig(st.session_state.math_data, show_labels, st.session_state.get("show_grid", False))
         correct_features = st.session_state.math_data[7]
         steps = st.session_state.math_data[8]
         target_eq = st.session_state.math_data[9]
     else:
         st.write("Find the linear equation $y = mx + c$ for this graph.")
-        fig = draw_line_fig(st.session_state.math_data, show_labels_state, st.session_state.get("show_grid", False))
+        fig = draw_line_fig(st.session_state.math_data, show_labels, st.session_state.get("show_grid", False))
         correct_features = st.session_state.math_data[7]
         steps = st.session_state.math_data[8]
         target_eq = st.session_state.math_data[9]
@@ -673,13 +622,8 @@ else:
 
     st.pyplot(fig)
 
-# STAGE 1: Identifying Graph Features / Form
+    # STAGE 1: Identifying Graph Features / Form
     if not st.session_state.identified_correctly:
-        
-        # Fix: Print the linear prompt to the main page BEFORE creating the columns
-        if prob_type == 'Linear':
-            st.write("**Which of these features applies to the graph?**")
-            
         c1, c2, c3 = st.columns(3)
         
         def check_feat(guess):
@@ -690,13 +634,14 @@ else:
                 st.session_state.feedback = "❌ Try again! Look closely at the graph."
 
         if prob_type == 'Quadratic':
-            btn_v = "y = a(x - h)² + k" if show_equations_state else "Vertex"
-            btn_i = "y = a(x - p)(x - q)" if show_equations_state else "Intercept"
-            btn_s = "y = ax² + bx + c" if show_equations_state else "Standard"
+            btn_v = "y = a(x - h)² + k" if show_equations else "Vertex"
+            btn_i = "y = a(x - p)(x - q)" if show_equations else "Intercept"
+            btn_s = "y = ax² + bx + c" if show_equations else "Standard"
             c1.button(btn_v, on_click=check_feat, args=("Vertex",), use_container_width=True)
             c2.button(btn_i, on_click=check_feat, args=("Intercept",), use_container_width=True)
             c3.button(btn_s, on_click=check_feat, args=("Standard",), use_container_width=True)
         else:
+            st.write("**Which of these features applies to the graph?**")
             c1.button(btn_choices[0], on_click=check_feat, args=(btn_choices[0],), use_container_width=True, key="lb1")
             c2.button(btn_choices[1], on_click=check_feat, args=(btn_choices[1],), use_container_width=True, key="lb2")
             c3.button(btn_choices[2], on_click=check_feat, args=(btn_choices[2],), use_container_width=True, key="lb3")
@@ -738,11 +683,7 @@ else:
                             st.session_state.ai_feedback = ""
                             st.rerun()
                 else:
-                    cam_mode = st.session_state.get('camera_mode', 'App')
-                    if cam_mode == 'App':
-                        picture = st.camera_input("Snap a photo of your working:")
-                    else:
-                        picture = st.file_uploader("Upload or snap a photo of your working:", type=['png', 'jpg', 'jpeg'])
+                    picture = st.camera_input("Snap a photo of your working:")
                     
                     if picture:
                         if st.button("Submit Working for AI Marking", use_container_width=True, type="primary"):
