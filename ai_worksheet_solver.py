@@ -93,7 +93,7 @@ if worksheet_file:
                 """
                 
                 response = client.models.generate_content(
-                    model='gemini-1.5-flash',
+                    model='gemini-3.6-flash',
                     contents=[prompt, img],
                     config=dict(
                         response_mime_type="application/json",
