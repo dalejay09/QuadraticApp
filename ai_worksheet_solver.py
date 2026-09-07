@@ -102,6 +102,9 @@ if worksheet_file:
                 You are an expert math solver. Look at the provided image of a worksheet.
                 Extract every distinct math problem you can find. 
                 For each problem, solve it step-by-step.
+                Please provide concise mathematical notation. 
+                For algebra solutions label equations Eq1, Eq2 etc if they are used in workings.
+                Use notation like "sub z into Eq2" and "Eq1 + 2xEq2" for combinations and eliminations.
                 Return the output STRICTLY adhering to the provided JSON schema.
                 """
                 
