@@ -104,7 +104,8 @@ if worksheet_file:
                 For each problem, solve it step-by-step.
                 Please provide concise mathematical notation. 
                 For algebra solutions label equations Eq1, Eq2 etc if they are used in workings.
-                Use notation like "sub z into Eq2" and "Eq1 + 2xEq2" for combinations and eliminations.
+                Use shortcut notation like "sub z into Eq2" and "Eq1 + 2xEq2" for combinations and eliminations.
+                Use newlines to aid in layout.
                 Return the output STRICTLY adhering to the provided JSON schema.
                 """
                 
