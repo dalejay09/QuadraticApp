@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import io
 import json
+import re
 from PIL import Image
 from datetime import datetime
 from google import genai
@@ -31,6 +32,18 @@ def create_solutions_pdf(solutions):
         y_pos = 0.88
         
         for sol in solutions:
+            # Handle dictionary vs pydantic object for PDF generation
+            if isinstance(sol, dict):
+                q_id = str(sol.get("question_id", ""))
+                prob = str(sol.get("original_problem", ""))
+                steps = str(sol.get("steps", ""))
+                ans = str(sol.get("final_answer", ""))
+            else:
+                q_id = str(getattr(sol, "question_id", ""))
+                prob = str(getattr(sol, "original_problem", ""))
+                steps = str(getattr(sol, "steps", ""))
+                ans = str(getattr(sol, "final_answer", ""))
+
             # Create a new page if we run out of vertical space
             if y_pos < 0.15:
                 pdf.savefig(fig)
@@ -41,9 +54,9 @@ def create_solutions_pdf(solutions):
             
             # Format the text block
             block = (
-                f"**{sol['question_id']}**: {sol['original_problem']}\n"
-                f"Steps: {sol['steps']}\n"
-                f"Answer: {sol['final_answer']}"
+                f"**{q_id}**: {prob}\n"
+                f"Steps: {steps}\n"
+                f"Answer: {ans}"
             )
             
             # Clean up Markdown bolding for Matplotlib (which doesn't natively support MD)
@@ -103,7 +116,8 @@ if worksheet_file:
                 )
                 
                 # 3. Parse Data
-                st.session_state.solutions_data = json.loads(response.text).get("solutions", [])
+                parsed_data = json.loads(response.text)
+                st.session_state.solutions_data = parsed_data.get("solutions", [])
                 st.session_state.pdf_bytes = create_solutions_pdf(st.session_state.solutions_data)
                 
             except Exception as e:
@@ -125,18 +139,31 @@ if st.session_state.solutions_data:
     """
     
     for row in st.session_state.solutions_data:
-        # Regex magic to render ^2 as superscripts in the web view
-        steps_html = re.sub(r'\^(\d+)', r'<sup>\1</sup>', row.get("steps", ""))
-        ans_html = re.sub(r'\^(\d+)', r'<sup>\1</sup>', row.get("final_answer", ""))
+        # 1. Safely extract data whether the SDK returned a Dictionary or a Pydantic Object
+        if isinstance(row, dict):
+            q_id = str(row.get("question_id", ""))
+            prob = str(row.get("original_problem", ""))
+            steps = str(row.get("steps", ""))
+            ans = str(row.get("final_answer", ""))
+        else:
+            q_id = str(getattr(row, "question_id", ""))
+            prob = str(getattr(row, "original_problem", ""))
+            steps = str(getattr(row, "steps", ""))
+            ans = str(getattr(row, "final_answer", ""))
+            
+        # 2. Apply superscripts now that we guarantee everything is a clean string
+        steps_html = re.sub(r'\^(\d+)', r'<sup>\1</sup>', steps)
+        ans_html = re.sub(r'\^(\d+)', r'<sup>\1</sup>', ans)
         
         html_table += f"""
         <tr style="border-bottom: 1px solid #e5e7eb;">
-            <td style="padding: 10px;"><b>{row.get("question_id", "")}</b></td>
-            <td style="padding: 10px;">{row.get("original_problem", "")}</td>
+            <td style="padding: 10px;"><b>{q_id}</b></td>
+            <td style="padding: 10px;">{prob}</td>
             <td style="padding: 10px;">{steps_html}</td>
             <td style="padding: 10px; font-weight: bold; color: #007AFF;">{ans_html}</td>
         </tr>
         """
+        
     html_table += "</table>"
     
     st.markdown(html_table, unsafe_allow_html=True)
