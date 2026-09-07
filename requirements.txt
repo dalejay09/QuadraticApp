@@ -4,3 +4,5 @@ matplotlib
 numpy
 Pillow
 google-genai
+fpdf2
+pydantic
