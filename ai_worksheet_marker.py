@@ -5,6 +5,7 @@ from google import genai
 from pydantic import BaseModel
 from datetime import datetime
 from fpdf import FPDF
+import re
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Mark My Worksheet", page_icon="📝", layout="centered")
@@ -162,14 +163,20 @@ if st.session_state.marking_results:
     # Generate HTML Table
     html_table = "<table class='result-table'><tr><th>Question</th><th>Status</th><th>Feedback</th></tr>"
     
+    
+    # ... inside the RENDER RESULTS block ...
+    
     for row in st.session_state.marking_results.results:
         # Normalize status to match CSS classes
         safe_status = row.status.upper()
         if safe_status not in ["CORRECT", "NEARLY", "INCORRECT"]: 
             safe_status = "INCORRECT"
             
+        # THE FIX: Convert plaintext exponents (e.g., ^2 or ^10) into proper HTML superscripts
+        display_feedback = re.sub(r'\^(\d+)', r'<sup>\1</sup>', row.feedback)
+            
         # Assembled on one flat line so Markdown doesn't mistake indents for Code Blocks
-        html_table += f"<tr class='row-{safe_status}'><td><strong>{row.question_indicator}</strong></td><td><span class='status-badge badge-{safe_status}'>{row.status.upper()}</span></td><td>{row.feedback}</td></tr>"
+        html_table += f"<tr class='row-{safe_status}'><td><strong>{row.question_indicator}</strong></td><td><span class='status-badge badge-{safe_status}'>{row.status.upper()}</span></td><td>{display_feedback}</td></tr>"
         
     html_table += "</table>"
     
