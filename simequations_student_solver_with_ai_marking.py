@@ -333,9 +333,10 @@ else:
         "objects": [{"type": "i-text", "text": icon, "left": pos, "top": 5, "fontSize": 24, "selectable": True, "hasControls": False, "hasBorders": True} for icon, pos in baselines.items()]
     }
 
+    # FIX: "transform" mode was physically removed from the package. Forced to fallback to "freedraw". 
     toolbar_result = st_canvas(
         fill_color="rgba(0,0,0,0)", stroke_width=0, background_color="#e5e7eb", update_streamlit=True,
-        height=45, width=350, drawing_mode="transform", initial_drawing=toolbar_initial,
+        height=45, width=350, drawing_mode="freedraw", initial_drawing=toolbar_initial,
         key=f"exp_toolbar_{st.session_state.experimental_toolbar_key}"
     )
 
@@ -344,12 +345,8 @@ else:
         for obj in toolbar_result.json_data.get("objects", []):
             text = obj.get("text", "")
             if text in baselines:
-                # Detect if the icon was dragged out of its starting position
                 if abs(obj.get("left", baselines[text]) - baselines[text]) > 2 or abs(obj.get("top", 5) - 5) > 2:
-                    
                     st.toast(f"Experimental Canvas Detected: {text}")
-                    
-                    # Execute matching action
                     if text in ["🖌️", "🧽"]: st.session_state.tool_selector = text
                     if text == "↩️" and len(st.session_state.stroke_history) > 1:
                         st.session_state.stroke_history.pop()
@@ -361,13 +358,12 @@ else:
                     if text == "📸":
                         st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
                         
-                    # Snap icons back to default position
                     st.session_state.experimental_toolbar_key += 1
                     st.rerun()
 
     # --- 3. The Native Toolbar (Retained for comparison) ---
     t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
-    with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key="tool_selector")
+    with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key="tool_selector_native")
     with t_col2:
         if st.button("↩️", use_container_width=True):
             if len(st.session_state.stroke_history) > 1:
