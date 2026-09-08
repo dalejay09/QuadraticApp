@@ -42,7 +42,6 @@ COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
 
 st.markdown("""
     <style>
-    /* Primary Button Styling */
     button[kind="primary"] {
         background-color: #007AFF !important;
         border-color: #007AFF !important;
@@ -53,7 +52,6 @@ st.markdown("""
         border-color: #0056b3 !important;
     }
     
-    /* Toolbar Tightening Hacks */
     .stRadio > div { gap: 0rem; }
     [data-testid="stHorizontalBlock"] { gap: 0.5rem; align-items: center; }
     div[data-testid="stToolbar"] { display: none; }
@@ -205,7 +203,7 @@ def create_pdf_bytes(var_count):
             prompt = f"""
             You are an expert math tutor. I generated a worksheet with {var_count}-variable algebra problems.
             I already know the equations and correct answers. 
-            Write the concise, human-readable step-by-step solution method for each problem (e.g., elimination or substitution).
+            Write the concise, human-readable step-by-step solution method for each problem.
             Keep it very brief (under 50 words per question) so it fits on a printed page. 
             Do NOT use markdown bolding or latex formats, use plain text formatting.
             
@@ -230,7 +228,6 @@ def create_pdf_bytes(var_count):
         except Exception as e:
             print(f"Background AI Solver failed, using fallback: {e}")
         
-        # Page 1: Questions
         fig, axes = plt.subplots(figsize=(8.27, 11.69))
         axes.axis('off')
         axes.text(0.5, 0.95, f"Algebra 101 Worksheet ({var_count} Variable{'s' if var_count>1 else ''})", fontsize=16, fontweight='bold', ha='center')
@@ -242,7 +239,6 @@ def create_pdf_bytes(var_count):
             axes.text(0.55, 0.88 - (i*0.085), f"Q{i+11}:\n{eq_text_R}", fontsize=11, va='top')
         pdf.savefig(fig); plt.close(fig)
 
-        # Page 2: Answer Key
         fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
         ax_ans.axis('off')
         ax_ans.text(0.5, 0.95, "Algebra 101 Answer Key", fontsize=16, fontweight='bold', ha='center')
@@ -253,7 +249,6 @@ def create_pdf_bytes(var_count):
             ax_ans.text(0.55, 0.88 - (i*0.085), f"Q{i+11}: {ans_R}", fontsize=11, va='top')
         pdf.savefig(fig_ans); plt.close(fig_ans)
 
-        # Page 3+: AI Generated Solutions Appendix
         for page_idx in range(2):
             fig_app, ax_app = plt.subplots(figsize=(8.27, 11.69))
             ax_app.axis('off')
@@ -327,6 +322,7 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = False
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'scroll_to_top' not in st.session_state: st.session_state.scroll_to_top = False
 if 'show_camera_supplement' not in st.session_state: st.session_state.show_camera_supplement = False
+if 'tool_selector' not in st.session_state: st.session_state.tool_selector = "🖌️"
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -412,10 +408,28 @@ else:
     
     st.write(f"Solve for **{', '.join(vars_list)}**! Current pen: **{current_color_name}**")
 
-    # --- Tight Unified Toolbar ---
+    # --- Drawing Canvas (Now referencing the state variable set below) ---
+    active_stroke_color = current_color_hex if st.session_state.tool_selector == "🖌️" else "#FFFFFE"
+    active_stroke_width = 3 if st.session_state.tool_selector == "🖌️" else 15
+
+    canvas_result = st_canvas(
+        fill_color="rgba(255, 165, 0, 0.3)", 
+        stroke_width=active_stroke_width, 
+        stroke_color=active_stroke_color,
+        background_image=st.session_state.bg_image,
+        update_streamlit=True,
+        height=canvas_height,
+        width=350,
+        drawing_mode="freedraw",
+        return_image_data=True, 
+        initial_drawing=st.session_state.active_initial_drawing, 
+        key=f"canvas_{st.session_state.canvas_key}",
+    )
+    
+    # --- Tight Unified Toolbar (Moved Below Canvas) ---
     t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
     with t_col1:
-        tool = st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed")
+        st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key="tool_selector")
     with t_col2:
         if st.button("↩️", use_container_width=True, help="Undo"):
             if len(st.session_state.stroke_history) > 1:
@@ -434,24 +448,7 @@ else:
         if st.button("📸 Paper", use_container_width=True, help="Add a photo of paper workings"):
             st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
             st.rerun()
-
-    active_stroke_color = current_color_hex if tool == "🖌️" else "#FFFFFE"
-    active_stroke_width = 3 if tool == "🖌️" else 15
-
-    canvas_result = st_canvas(
-        fill_color="rgba(255, 165, 0, 0.3)", 
-        stroke_width=active_stroke_width, 
-        stroke_color=active_stroke_color,
-        background_image=st.session_state.bg_image,
-        update_streamlit=True,
-        height=canvas_height,
-        width=350,
-        drawing_mode="freedraw",
-        return_image_data=True, 
-        initial_drawing=st.session_state.active_initial_drawing, 
-        key=f"canvas_{st.session_state.canvas_key}",
-    )
-    
+            
     # Custom Eraser Logic
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
     last_saved_objects = st.session_state.stroke_history[-1]
