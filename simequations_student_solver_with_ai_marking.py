@@ -323,45 +323,65 @@ else:
         key=f"canvas_{st.session_state.canvas_key}"
     )
 
-    # --- 2. EXPERIMENTAL Transform Canvas Toolbar ---
-    st.caption("🔬 *Experimental Canvas Toolbar (Drag an icon slightly to trigger it!)*")
+    # --- 2. EXPERIMENTAL Scribble Intercept Toolbar ---
+    st.caption("🔬 *Scribble Toolbar (Tap an icon!)*")
     
-    # Baseline coordinates for the icons
-    baselines = {"🖌️": 20, "🧽": 90, "↩️": 160, "🗑️": 230, "📸": 300}
-    toolbar_initial = {
-        "version": "4.4.0",
-        "objects": [{"type": "i-text", "text": icon, "left": pos, "top": 5, "fontSize": 24, "selectable": True, "hasControls": False, "hasBorders": True} for icon, pos in baselines.items()]
-    }
+    # Generate static background layout with 5 distinct hit zones
+    icons = ["🖌️", "🧽", "↩️", "🗑️", "📸"]
+    toolbar_objects = []
+    for i, icon in enumerate(icons):
+        center_x = (i * 70) + 35
+        # The text icon
+        toolbar_objects.append({"type": "i-text", "text": icon, "left": center_x - 12, "top": 5, "fontSize": 24, "selectable": False})
+        # The separator line (except for the last one)
+        if i < 4:
+            toolbar_objects.append({"type": "line", "x1": (i+1)*70, "y1": 5, "x2": (i+1)*70, "y2": 40, "stroke": "#d1d5db", "strokeWidth": 2, "selectable": False})
 
-    # FIX: "transform" mode was physically removed from the package. Forced to fallback to "freedraw". 
+    toolbar_initial = {"version": "4.4.0", "objects": toolbar_objects}
+
     toolbar_result = st_canvas(
-        fill_color="rgba(0,0,0,0)", stroke_width=0, background_color="#e5e7eb", update_streamlit=True,
+        fill_color="rgba(0,0,0,0)", stroke_width=2, stroke_color="#007AFF", background_color="#f3f4f6", update_streamlit=True,
         height=45, width=350, drawing_mode="freedraw", initial_drawing=toolbar_initial,
         key=f"exp_toolbar_{st.session_state.experimental_toolbar_key}"
     )
 
-    # Process Experimental Interaction
+    # Detect the scribble intercept
     if toolbar_result.json_data is not None:
-        for obj in toolbar_result.json_data.get("objects", []):
-            text = obj.get("text", "")
-            if text in baselines:
-                if abs(obj.get("left", baselines[text]) - baselines[text]) > 2 or abs(obj.get("top", 5) - 5) > 2:
-                    st.toast(f"Experimental Canvas Detected: {text}")
-                    if text in ["🖌️", "🧽"]: st.session_state.tool_selector = text
-                    if text == "↩️" and len(st.session_state.stroke_history) > 1:
-                        st.session_state.stroke_history.pop()
-                        st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": st.session_state.stroke_history[-1]}
-                        st.session_state.canvas_key += 1
-                    if text == "🗑️":
-                        st.session_state.stroke_history, st.session_state.active_initial_drawing = [[]], {"version": "4.4.0", "objects": []}
-                        st.session_state.canvas_key += 1
-                    if text == "📸":
-                        st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
-                        
-                    st.session_state.experimental_toolbar_key += 1
-                    st.rerun()
+        objects = toolbar_result.json_data.get("objects", [])
+        # The initial_drawing has 9 objects (5 icons + 4 lines). If there are more, the user tapped!
+        if len(objects) > 9:
+            new_stroke = objects[-1]
+            # Calculate the exact center of the user's scribble
+            stroke_center_x = new_stroke.get("left", 0) + (new_stroke.get("width", 0) * new_stroke.get("scaleX", 1) / 2)
+            
+            # Map coordinate to hit zone
+            action = None
+            if 0 <= stroke_center_x < 70: action = "🖌️"
+            elif 70 <= stroke_center_x < 140: action = "🧽"
+            elif 140 <= stroke_center_x < 210: action = "↩️"
+            elif 210 <= stroke_center_x < 280: action = "🗑️"
+            elif 280 <= stroke_center_x <= 350: action = "📸"
+            
+            if action:
+                st.toast(f"Toolbar Tapped: {action}")
+                if action in ["🖌️", "🧽"]: st.session_state.tool_selector = action
+                if action == "↩️" and len(st.session_state.stroke_history) > 1:
+                    st.session_state.stroke_history.pop()
+                    st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": st.session_state.stroke_history[-1]}
+                    st.session_state.canvas_key += 1
+                if action == "🗑️":
+                    st.session_state.stroke_history, st.session_state.active_initial_drawing = [[]], {"version": "4.4.0", "objects": []}
+                    st.session_state.canvas_key += 1
+                if action == "📸":
+                    st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
+            
+            # Instantly wipe the scribble by incrementing the canvas key
+            st.session_state.experimental_toolbar_key += 1
+            st.rerun()
 
     # --- 3. The Native Toolbar (Retained for comparison) ---
+    st.write("---")
+    st.caption("Native Toolbar Comparison")
     t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
     with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key="tool_selector_native")
     with t_col2:
@@ -375,7 +395,7 @@ else:
             st.session_state.stroke_history, st.session_state.active_initial_drawing, st.session_state.canvas_key = [[]], {"version": "4.4.0", "objects": []}, st.session_state.canvas_key + 1
             st.rerun()
     with t_col4:
-        if st.button("📸 Paper", use_container_width=True):
+        if st.button("📸", use_container_width=True):
             st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
             st.rerun()
             
