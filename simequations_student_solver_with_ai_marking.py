@@ -408,7 +408,7 @@ else:
     
     st.write(f"Solve for **{', '.join(vars_list)}**! Current pen: **{current_color_name}**")
 
-    # --- Drawing Canvas (Now referencing the state variable set below) ---
+    # --- Drawing Canvas ---
     active_stroke_color = current_color_hex if st.session_state.tool_selector == "🖌️" else "#FFFFFE"
     active_stroke_width = 3 if st.session_state.tool_selector == "🖌️" else 15
 
@@ -495,7 +495,6 @@ else:
     if st.button("Check My Answer!", type="primary", use_container_width=True):
         payload_images = []
         
-        # 1. Grab Canvas Ink (if any exists)
         if canvas_result.image_data is not None and len(st.session_state.stroke_history[-1]) > 0:
             ink_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
             bg = st.session_state.bg_image.convert("RGBA")
@@ -504,7 +503,6 @@ else:
             final_canvas = Image.alpha_composite(bg, ink_img).convert("RGB")
             payload_images.append(final_canvas)
             
-        # 2. Grab Paper Photo (if provided)
         if camera_picture:
             paper_img = Image.open(camera_picture).convert('RGB')
             paper_img.thumbnail((1024, 1024))
@@ -540,7 +538,6 @@ else:
                         st.session_state.ai_feedback = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text)
                         st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                     
-                    st.session_state.scroll_to_top = True
                     st.rerun()
                 except Exception as e:
                     st.error(f"Oops! The tutor had a glitch: {e}")
