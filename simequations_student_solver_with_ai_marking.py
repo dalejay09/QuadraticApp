@@ -429,7 +429,9 @@ else:
         else:
             with st.spinner("Reviewing your workings..."):
                 try:
-                    response = genai.Client(api_key=st.secrets["GEMINI_API_KEY"]).models.generate_content(
+                    # FIX: Explicitly hold the client object open for the duration of the call
+                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                    response = client.models.generate_content(
                         model='gemini-3.6-flash',
                         contents=[f"Grade this algebra problem. Equations: {', '.join(eqs)}. Answers: {sol_str}. Current canvas ink: {COLOR_NAMES[st.session_state.color_index]}. If completely correct and states final answer, reply 'CORRECT:'. Else reply 'INCORRECT:' with a brief hint."] + payload_images
                     )
