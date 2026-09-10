@@ -427,7 +427,7 @@ else:
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     response = client.models.generate_content(
                         model='gemini-3.6-flash',
-                        contents=[f"Grade this algebra problem. Equations: {', '.join(eqs)}. Answers: {sol_str}. Current canvas ink: {COLOR_NAMES[st.session_state.color_index]}. Most recent markup colors should be prioritised for corrections, but prior pens not discounted. If completely correct and states final answer, reply 'CORRECT:'. Else reply 'INCORRECT:' with a brief hint."] + payload_images
+                        contents=[f"Grade the math problem presented in the images. Equations: Current canvas ink: {COLOR_NAMES[st.session_state.color_index]}. Most recent markup colors should be prioritised for corrections, but prior pens not discounted. If completely correct and states final answer, reply 'CORRECT:'. Else reply 'INCORRECT:' with a brief hint."] + payload_images
                     )
                     
                     # FIX: Explicit Fallback for perfectly empty AI strings
