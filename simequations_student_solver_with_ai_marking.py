@@ -348,13 +348,9 @@ else:
     # Detect the scribble intercept
     if toolbar_result.json_data is not None:
         objects = toolbar_result.json_data.get("objects", [])
-        # The initial_drawing has 9 objects (5 icons + 4 lines). If there are more, the user tapped!
         if len(objects) > 9:
             new_stroke = objects[-1]
-            # Calculate the exact center of the user's scribble
             stroke_center_x = new_stroke.get("left", 0) + (new_stroke.get("width", 0) * new_stroke.get("scaleX", 1) / 2)
-            
-            # Map coordinate to hit zone
             action = None
             if 0 <= stroke_center_x < 70: action = "🖌️"
             elif 70 <= stroke_center_x < 140: action = "🧽"
@@ -375,7 +371,6 @@ else:
                 if action == "📸":
                     st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
             
-            # Instantly wipe the scribble by incrementing the canvas key
             st.session_state.experimental_toolbar_key += 1
             st.rerun()
 
@@ -429,22 +424,33 @@ else:
         else:
             with st.spinner("Reviewing your workings..."):
                 try:
-                    # FIX: Explicitly hold the client object open for the duration of the call
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     response = client.models.generate_content(
                         model='gemini-3.6-flash',
                         contents=[f"Grade this algebra problem. Equations: {', '.join(eqs)}. Answers: {sol_str}. Current canvas ink: {COLOR_NAMES[st.session_state.color_index]}. If completely correct and states final answer, reply 'CORRECT:'. Else reply 'INCORRECT:' with a brief hint."] + payload_images
                     )
-                    if response.text.strip().upper().startswith("CORRECT"):
-                        st.session_state.is_correct, st.session_state.ai_feedback = True, re.sub(r'(?i)^CORRECT:?\s*', '', response.text.strip())
+                    
+                    # FIX: Explicit Fallback for perfectly empty AI strings
+                    response_text = response.text.strip()
+                    if response_text.upper().startswith("CORRECT"):
+                        st.session_state.is_correct = True
+                        cleaned = re.sub(r'(?i)^CORRECT:?\s*', '', response_text).strip()
+                        st.session_state.ai_feedback = cleaned if cleaned else "Perfect! You solved it correctly."
                     else:
-                        st.session_state.is_correct, st.session_state.ai_feedback = False, re.sub(r'(?i)^INCORRECT:?\s*', '', response.text.strip())
+                        st.session_state.is_correct = False
+                        cleaned = re.sub(r'(?i)^INCORRECT:?\s*', '', response_text).strip()
+                        st.session_state.ai_feedback = cleaned if cleaned else "Something doesn't look quite right. Give it another try!"
                         st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
+                        
                     st.rerun()
                 except Exception as e: st.error(f"Error: {e}")
 
+    # Render Feedback
     if st.session_state.ai_feedback:
-        st.success(f"🌟 **Awesome job!** {st.session_state.ai_feedback}") if st.session_state.is_correct else st.warning(f"🤖 **Tutor says:** {st.session_state.ai_feedback}")
+        if st.session_state.is_correct:
+            st.success(f"🌟 **Awesome job!** {st.session_state.ai_feedback}")
+        else:
+            st.warning(f"🤖 **Tutor says:** {st.session_state.ai_feedback}")
 
     st.write("")
     if st.button("Give me a new problem!", use_container_width=True):
