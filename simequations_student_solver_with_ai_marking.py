@@ -1,44 +1,22 @@
 import streamlit as st
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 import random
 import string
 import io
 import json
-import re
-import base64
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from PIL import Image
 from datetime import datetime
-from google import genai
-from pydantic import BaseModel, Field
+from matplotlib.backends.backend_pdf import PdfPages
 import streamlit.components.v1 as components
+from pydantic import BaseModel, Field
 
-# --- THE ULTIMATE MONKEY PATCH ---
-import streamlit_drawable_canvas
-def b64_image_to_url(image, *args, **kwargs):
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-    return f"data:image/png;base64,{img_str}"
-
-streamlit_drawable_canvas.image_to_url = b64_image_to_url
-from streamlit_drawable_canvas import st_canvas
-# ---------------------------------
-
-# --- AI Output Schemas ---
-class SolutionRow(BaseModel):
-    q_num: int = Field(description="The question number (1 to 20)")
-    steps: str = Field(description="Step-by-step solving method (plain text, no latex blocks, use basic newlines)")
-
-class AIWorksheetSolutions(BaseModel):
-    solutions: list[SolutionRow]
+# --- Import the encapsulated logic ---
+import ai_marking_component
 
 # --- Configuration & CSS Layout Hacks ---
 st.set_page_config(page_title="Algebra 101", page_icon="🧮", layout="centered")
-PEN_COLORS = ["#1E90FF", "#FF2400", "#32CD32", "#9400D3", "#FF8C00"]
-COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
 
 st.markdown("""
     <style>
@@ -56,6 +34,14 @@ st.markdown("""
     div[data-testid="stToolbar"] { display: none; }
     </style>
 """, unsafe_allow_html=True)
+
+# --- AI Output Schemas for backend feature (PDF generation) ---
+class SolutionRow(BaseModel):
+    q_num: int = Field(description="The question number (1 to 20)")
+    steps: str = Field(description="Step-by-step solving method (plain text, no latex blocks, use basic newlines)")
+
+class AIWorksheetSolutions(BaseModel):
+    solutions: list[SolutionRow]
 
 # --- Math Engine: ALGEBRA ---
 def get_valid_vars(count):
@@ -161,13 +147,46 @@ def generate_algebra_problem(override_var_count=None):
         canvas_eqs = [build_canvas_row(r1, vars, c1), build_canvas_row(r2, vars, c2), build_canvas_row(r3, vars, c3)]
         return [eq1, eq2, eq3], {v1: ans1, v2: ans2, v3: ans3}, vars, 800, fallback, canvas_eqs
 
-# --- Integrated AI-PDF Generation Engine ---
+# --- Visual Engine: BACKEND MATPLOTLIB (problem background) ---
+def draw_equations(canvas_eqs, height_px):
+    width_px = 350
+    fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100) 
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis('off')
+    
+    font_size = 20 if len(canvas_eqs) <= 2 else 16
+    y_start, y_step = 0.90, 0.08 if height_px <= 450 else 0.06
+    
+    for i, row in enumerate(canvas_eqs):
+        y = y_start - i * y_step
+        if len(row) == 1:
+            ax.text(0.5, y, f"${row[0]}$", fontsize=font_size, ha='center', va='top')
+        else:
+            num_vars = len(row) - 2
+            x_coords = [0.38, 0.58] if num_vars == 2 else [0.26, 0.46, 0.66]
+            x_eq, x_rhs = (0.65, 0.70) if num_vars == 2 else (0.72, 0.77)
+            for j in range(num_vars):
+                if row[j]: ax.text(x_coords[j], y, f"${row[j]}$", fontsize=font_size, ha='right', va='top')
+            ax.text(x_eq, y, "$=$", fontsize=font_size, ha='center', va='top')
+            ax.text(x_rhs, y, f"${row[-1]}$", fontsize=font_size, ha='left', va='top')
+    
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
+    plt.close(fig)
+    buf.seek(0)
+    return Image.open(buf).convert('RGBA').copy()
+
+# --- Integrated AI-PDF Generation Engine (PDF Worksheet only feature) ---
 def create_pdf_bytes(var_count):
+    from google import genai # lazily import inside for PDF isolation
     buffer = io.BytesIO()
     with PdfPages(buffer) as pdf:
         problems = [generate_algebra_problem(var_count) for _ in range(20)]
         ai_steps = {}
         try:
+            # unique connection for background process
             client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
             payload = "".join([f"Q{i+1}: Eqs: [{' ; '.join(p[0])}] | Ans: [{', '.join([f'{k}={v}' for k,v in p[1].items()])}]\n" for i, p in enumerate(problems)])
             prompt = f"Write the concise, human-readable step-by-step solution method for each problem. Keep it very brief. Plain text formatting.\nData:\n{payload}"
@@ -210,56 +229,23 @@ def create_pdf_bytes(var_count):
             pdf.savefig(fig_app); plt.close(fig_app)
     return buffer.getvalue()
 
-# --- Visual Engine: BACKEND MATPLOTLIB ---
-def draw_equations(canvas_eqs, height_px):
-    width_px = 350
-    fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100) 
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis('off')
-    
-    font_size = 20 if len(canvas_eqs) <= 2 else 16
-    y_start, y_step = 0.90, 0.08 if height_px <= 450 else 0.06
-    
-    for i, row in enumerate(canvas_eqs):
-        y = y_start - i * y_step
-        if len(row) == 1:
-            ax.text(0.5, y, f"${row[0]}$", fontsize=font_size, ha='center', va='top')
-        else:
-            num_vars = len(row) - 2
-            x_coords = [0.38, 0.58] if num_vars == 2 else [0.26, 0.46, 0.66]
-            x_eq, x_rhs = (0.65, 0.70) if num_vars == 2 else (0.72, 0.77)
-            for j in range(num_vars):
-                if row[j]: ax.text(x_coords[j], y, f"${row[j]}$", fontsize=font_size, ha='right', va='top')
-            ax.text(x_eq, y, "$=$", fontsize=font_size, ha='center', va='top')
-            ax.text(x_rhs, y, f"${row[-1]}$", fontsize=font_size, ha='left', va='top')
-    
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
-    plt.close(fig)
-    buf.seek(0)
-    return Image.open(buf).convert('RGBA').copy()
-
-# --- Memory Stack Initialization ---
+# --- Overhead State Initialization managed by parent App ---
 if 'generating' not in st.session_state: st.session_state.generating = True
-if 'ai_feedback' not in st.session_state: st.session_state.ai_feedback = ""
-if 'canvas_key' not in st.session_state: st.session_state.canvas_key = 0 
 if 'var_count' not in st.session_state: st.session_state.var_count = 1
 if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
-if 'color_index' not in st.session_state: st.session_state.color_index = 0
-if 'stroke_history' not in st.session_state: st.session_state.stroke_history = [[]]
-if 'active_initial_drawing' not in st.session_state: st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
-if 'is_correct' not in st.session_state: st.session_state.is_correct = False
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'scroll_to_top' not in st.session_state: st.session_state.scroll_to_top = False
-if 'show_camera_supplement' not in st.session_state: st.session_state.show_camera_supplement = False
-if 'tool_selector' not in st.session_state: st.session_state.tool_selector = "🖌️"
-if 'experimental_toolbar_key' not in st.session_state: st.session_state.experimental_toolbar_key = 0
+# manage unique problem id/canvas reset logic overhead
+if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
 
-def handle_settings_change():
+def handle_algebra_settings_change():
+    """
+    Overhead settings logic forces problem regenerate AND component reinitialization logic.
+    """
     st.session_state.generating = True
     st.session_state.pdf_bytes = None
+    st.session_state.current_marking_color_index = 0 # reset app-level color index
+    st.session_state.problem_suite_refresh_id += 1 # uniquely key the component/init logic
 
 if st.session_state.scroll_to_top:
     components.html("<script>window.parent.scrollTo(0, 0);</script>", height=0)
@@ -290,181 +276,49 @@ with col_actions:
 with col_set:
     with st.popover("⚙️", use_container_width=True):
         st.write("**Settings**")
-        st.radio("Variables", [1, 2, 3], key="var_count", on_change=handle_settings_change)
+        st.radio("Variables", [1, 2, 3], key="var_count", on_change=handle_algebra_settings_change)
         st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
 
+# Main Application Logic
 if st.session_state.generating:
     with st.spinner("Generating equations..."):
-        if len(st.session_state.get("math_data", [])) == 6:
+        # Parent App uniquely context data generation (Algebra specifc)
+        if len(st.session_state.get("algebra_math_context_data", [])) == 6:
             eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = generate_algebra_problem()
         else:
             eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = generate_algebra_problem()
-        st.session_state.math_data = (eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs)
-        st.session_state.bg_image = draw_equations(canvas_eqs, canvas_height)
-        st.session_state.ai_feedback, st.session_state.color_index, st.session_state.is_correct = "", 0, False
-        st.session_state.stroke_history, st.session_state.active_initial_drawing = [[]], {"version": "4.4.0", "objects": []}
-        st.session_state.canvas_key += 1; st.session_state.generating = False
+        
+        st.session_state.algebra_math_context_data = (eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs)
+        # Parent app generates context-specific background problem image used by marking component
+        st.session_state.problem_image_context = draw_equations(canvas_eqs, canvas_height)
+        st.session_state.algebraic_context_vars_list = vars_list
+        
+        # Reset overarching application color sequence management state for new problem.
+        st.session_state.current_marking_color_index = 0
+        
+        st.session_state.generating = False
         st.rerun()
 
 else:
-    eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = st.session_state.math_data
-    
-    st.write(f"Solve for **{', '.join(vars_list)}**! Current pen: **{COLOR_NAMES[st.session_state.color_index]}**")
+    # Read generated contextual problem data. 
+    eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = st.session_state.algebra_math_context_data
+    context_bg_image = st.session_state.problem_image_context
+    context_vars_list = st.session_state.algebraic_context_vars_list
 
-    # --- 1. Main Drawing Canvas ---
-    active_stroke_color = PEN_COLORS[st.session_state.color_index] if st.session_state.tool_selector == "🖌️" else "#FFFFFE"
-    active_stroke_width = 3 if st.session_state.tool_selector == "🖌️" else 15
+    # parent app specific header
+    st.write(f"Solve for **{', '.join(context_vars_list)}**! Color cycle reset.")
 
-    canvas_result = st_canvas(
-        fill_color="rgba(255, 165, 0, 0.3)", stroke_width=active_stroke_width, stroke_color=active_stroke_color,
-        background_image=st.session_state.bg_image, update_streamlit=True, height=canvas_height, width=350,
-        drawing_mode="freedraw", return_image_data=True, initial_drawing=st.session_state.active_initial_drawing, 
-        key=f"canvas_{st.session_state.canvas_key}"
+    # --- INJECT UNIVERSAL MARKING SUITE COMPONENT ---
+    # WE PASS NO PLAIN TEXT EQUATIONS OR SOLUTIONS TO THE GRADING ENGINE.
+    # The gradingengine is functionally pure; it rely entirely on background VQA deduction.
+    ai_marking_component.render_grading_suite(
+        bg_image=context_bg_image,
+        height_px=canvas_height,
+        # Uniquely key the specific logic refresh/init encapsulantes state bleeding
+        key_prefix=f"marking_suite_{st.session_state.problem_suite_refresh_id}"
     )
-
-    # --- 2. EXPERIMENTAL Scribble Intercept Toolbar (Currently Disabled) ---
-    if False:
-        st.caption("🔬 *Scribble Toolbar (Tap an icon!)*")
-        icons = ["🖌️", "🧽", "↩️", "🗑️", "📸"]
-        toolbar_objects = []
-        for i, icon in enumerate(icons):
-            center_x = (i * 70) + 35
-            toolbar_objects.append({"type": "i-text", "text": icon, "left": center_x - 12, "top": 5, "fontSize": 24, "selectable": False})
-            if i < 4:
-                toolbar_objects.append({"type": "line", "x1": (i+1)*70, "y1": 5, "x2": (i+1)*70, "y2": 40, "stroke": "#d1d5db", "strokeWidth": 2, "selectable": False})
-
-        toolbar_initial = {"version": "4.4.0", "objects": toolbar_objects}
-        toolbar_result = st_canvas(
-            fill_color="rgba(0,0,0,0)", stroke_width=2, stroke_color="#007AFF", background_color="#f3f4f6", update_streamlit=True,
-            height=45, width=350, drawing_mode="freedraw", initial_drawing=toolbar_initial,
-            key=f"exp_toolbar_{st.session_state.experimental_toolbar_key}"
-        )
-
-        if toolbar_result.json_data is not None:
-            objects = toolbar_result.json_data.get("objects", [])
-            if len(objects) > 9:
-                new_stroke = objects[-1]
-                stroke_center_x = new_stroke.get("left", 0) + (new_stroke.get("width", 0) * new_stroke.get("scaleX", 1) / 2)
-                action = None
-                if 0 <= stroke_center_x < 70: action = "🖌️"
-                elif 70 <= stroke_center_x < 140: action = "🧽"
-                elif 140 <= stroke_center_x < 210: action = "↩️"
-                elif 210 <= stroke_center_x < 280: action = "🗑️"
-                elif 280 <= stroke_center_x <= 350: action = "📸"
-                
-                if action:
-                    st.toast(f"Toolbar Tapped: {action}")
-                    if action in ["🖌️", "🧽"]: st.session_state.tool_selector = action
-                    if action == "↩️" and len(st.session_state.stroke_history) > 1:
-                        st.session_state.stroke_history.pop()
-                        st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": st.session_state.stroke_history[-1]}
-                        st.session_state.canvas_key += 1
-                    if action == "🗑️":
-                        st.session_state.stroke_history, st.session_state.active_initial_drawing = [[]], {"version": "4.4.0", "objects": []}
-                        st.session_state.canvas_key += 1
-                    if action == "📸":
-                        st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
-                
-                st.session_state.experimental_toolbar_key += 1
-                st.rerun()
-
-    # --- 3. The Native Toolbar ---
-    t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
-    with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key="tool_selector")
-    with t_col2:
-        if st.button("↩️", use_container_width=True):
-            if len(st.session_state.stroke_history) > 1:
-                st.session_state.stroke_history.pop()
-                st.session_state.active_initial_drawing, st.session_state.canvas_key = {"version": "4.4.0", "objects": st.session_state.stroke_history[-1]}, st.session_state.canvas_key + 1
-                st.rerun()
-    with t_col3:
-        if st.button("🗑️", use_container_width=True):
-            st.session_state.stroke_history, st.session_state.active_initial_drawing, st.session_state.canvas_key = [[]], {"version": "4.4.0", "objects": []}, st.session_state.canvas_key + 1
-            st.rerun()
-    with t_col4:
-        if st.button("📸 Paper", use_container_width=True):
-            st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
-            st.rerun()
-            
-    # Eraser Logic
-    current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
-    if len(current_objects) > len(st.session_state.stroke_history[-1]):
-        if current_objects[-1].get("stroke", "").upper() == "#FFFFFE":
-            e = current_objects[-1]
-            E_L, E_R, E_T, E_B = e.get("left",0)-15, e.get("left",0)+(e.get("width",0)*e.get("scaleX",1))+15, e.get("top",0)-15, e.get("top",0)+(e.get("height",0)*e.get("scaleY",1))+15
-            objects_to_keep = [obj for obj in st.session_state.stroke_history[-1] if not (E_R < obj.get("left",0) or E_L > obj.get("left",0)+(obj.get("width",0)*obj.get("scaleX",1)) or E_B < obj.get("top",0) or E_T > obj.get("top",0)+(obj.get("height",0)*obj.get("scaleY",1)))]
-            st.session_state.stroke_history.append(objects_to_keep)
-            st.session_state.active_initial_drawing, st.session_state.canvas_key = {"version": "4.4.0", "objects": objects_to_keep}, st.session_state.canvas_key + 1
-            st.rerun()
-        else:
-            st.session_state.stroke_history.append(current_objects.copy())
-
-    # --- Unified AI Processing ---
-    camera_picture = None
-    if st.session_state.show_camera_supplement:
-        camera_picture = st.camera_input("Snap a photo:") if st.session_state.get('camera_mode', 'App') == 'App' else st.file_uploader("Upload photo:", type=['png', 'jpg'])
-
-    st.write("---")
-    if st.button("Check My Answer!", type="primary", use_container_width=True):
-        payload_images = []
-        if canvas_result.image_data is not None and len(st.session_state.stroke_history[-1]) > 0:
-            ink = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA').resize(st.session_state.bg_image.size, Image.Resampling.LANCZOS)
-            payload_images.append(Image.alpha_composite(st.session_state.bg_image.convert("RGBA"), ink).convert("RGB"))
-        if camera_picture: payload_images.append(Image.open(camera_picture).convert('RGB').resize((1024, 1024)))
-            
-        if not payload_images: st.error("Please draw your workings on the canvas or snap a photo first!")
-        else:
-            with st.spinner("Reviewing your workings..."):
-                try:
-                    color_sequence_str = ", ".join(COLOR_NAMES)
-                    current_color_str = COLOR_NAMES[st.session_state.color_index]
-                    
-                    generic_prompt = f"""
-                    You are an expert, encouraging math tutor grading a student's work.
-                    The problem to be solved is written on the provided canvas/image. Please deduce the question being solved directly from the image.
-                    
-                    The student is using a sequence of pen colors to show their progress over time. 
-                    The full sequence of colors they cycle through is: {color_sequence_str}.
-                    They are currently writing in: {current_color_str}.
-                    
-                    CRITICAL VISUAL PARSING RULES (EVALUATE IN THIS EXACT ORDER):
-                    1. STEP 1 (OVERWRITING): First, assume the newer color is meant to replace the older color. Look exclusively at the {current_color_str} ink. If the {current_color_str} ink alone shows the correct mathematical final answer, treat it as correct and ignore the messy older ink underneath.
-                    2. STEP 2 (COMBINED MARKUP): If Step 1 does not yield a correct answer, shift your perspective. Students sometimes add strokes in a new color to alter an existing number (like adding a top bar to turn a '1' into a '7', or a stroke to make a '+' sign). Evaluate the tangled messy ink as a single, combined shape. If the combined colors together form the correct final answer, treat it as correct.
-                    3. STEP 3 (DELETIONS): If you see zig-zags or distinct scribbles over old work, assume that specific part is deleted. Do NOT interpret scribbles as minus signs or fraction bars.
-                    
-                    GRADING INSTRUCTIONS:
-                    - If Step 1 OR Step 2 reveals the mathematically correct final answer, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message. Be highly forgiving of visual messiness.
-                    - If their working is still incorrect, incomplete, or missing the final answer after trying all steps, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief, encouraging hint on what to do next. Do not give the final answer.
-                    """
-
-                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                    response = client.models.generate_content(
-                        model='gemini-3.6-flash',
-                        contents=[generic_prompt] + payload_images
-                    )
-                    
-                    response_text = response.text.strip()
-                    if response_text.upper().startswith("CORRECT"):
-                        st.session_state.is_correct = True
-                        cleaned = re.sub(r'(?i)^CORRECT:?\s*', '', response_text).strip()
-                        st.session_state.ai_feedback = cleaned if cleaned else "Perfect! You solved it correctly."
-                    else:
-                        st.session_state.is_correct = False
-                        cleaned = re.sub(r'(?i)^INCORRECT:?\s*', '', response_text).strip()
-                        st.session_state.ai_feedback = cleaned if cleaned else "Something doesn't look quite right. Give it another try!"
-                        st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
-                        
-                    st.rerun()
-                except Exception as e: st.error(f"Error: {e}")
-
-    # Render Feedback
-    if st.session_state.ai_feedback:
-        if st.session_state.is_correct:
-            st.success(f"🌟 **Awesome job!** {st.session_state.ai_feedback}")
-        else:
-            st.warning(f"🤖 **Tutor says:** {st.session_state.ai_feedback}")
 
     st.write("")
     if st.button("Give me a new problem!", use_container_width=True):
-        st.session_state.generating, st.session_state.scroll_to_top = True, True
+        handle_algebra_settings_change() # Parent app manages overarching business logic shared states resets component ID force refresh
         st.rerun()
