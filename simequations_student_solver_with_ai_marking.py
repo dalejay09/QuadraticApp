@@ -416,25 +416,25 @@ else:
         else:
             with st.spinner("Reviewing your workings..."):
                 try:
-                    # Generic Vision Prompt with visual parsing instructions
                     color_sequence_str = ", ".join(COLOR_NAMES)
                     current_color_str = COLOR_NAMES[st.session_state.color_index]
                     
                     generic_prompt = f"""
                     You are an expert, encouraging math tutor grading a student's work.
-                    The problem to be solved is written on the provided canvas/image, along with the student's workings. Please deduce the question being solved directly from the image.
+                    The problem to be solved is written on the provided canvas/image. Please deduce the question being solved directly from the image.
                     
-                    The student is using a sequence of pen colors to show their progress and corrections over time. 
+                    The student is using a sequence of pen colors to show their progress over time. 
                     The full sequence of colors they cycle through is: {color_sequence_str}.
                     They are currently writing in: {current_color_str}.
                     
-                    CRITICAL VISUAL PARSING RULES:
-                    - Prioritize the most recent markups in the later pen colors (especially the current one), but read the whole sequence to understand their thought process.
-                    - IMPORTANT: If you see scribbles, zig-zags, strikethroughs, or cross-outs (especially in a newer color drawn over an older color), interpret this as the student DELETING or REJECTING that underlying work. Do NOT interpret scribbles as new mathematical operations (like minus signs, fraction bars, or numbers). Ignore the crossed-out workings when evaluating their final logic.
+                    CRITICAL VISUAL PARSING RULES (EVALUATE IN THIS EXACT ORDER):
+                    1. STEP 1 (OVERWRITING): First, assume the newer color is meant to replace the older color. Look exclusively at the {current_color_str} ink. If the {current_color_str} ink alone shows the correct mathematical final answer, treat it as correct and ignore the messy older ink underneath.
+                    2. STEP 2 (COMBINED MARKUP): If Step 1 does not yield a correct answer, shift your perspective. Students sometimes add strokes in a new color to alter an existing number (like adding a top bar to turn a '1' into a '7', or a stroke to make a '+' sign). Evaluate the tangled messy ink as a single, combined shape. If the combined colors together form the correct final answer, treat it as correct.
+                    3. STEP 3 (DELETIONS): If you see zig-zags or distinct scribbles over old work, assume that specific part is deleted. Do NOT interpret scribbles as minus signs or fraction bars.
                     
-                    1. Evaluate their step-by-step math based entirely on what you see, ignoring the deleted/crossed-out mistakes.
-                    2. If their final answer is completely correct and explicitly stated, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
-                    3. If their working is incorrect, incomplete, or they haven't found the final answer yet, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief hint on where they went wrong or what to do next. Do not give them the final answer.
+                    GRADING INSTRUCTIONS:
+                    - If Step 1 OR Step 2 reveals the mathematically correct final answer, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message. Be highly forgiving of visual messiness.
+                    - If their working is still incorrect, incomplete, or missing the final answer after trying all steps, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief, encouraging hint on what to do next. Do not give the final answer.
                     """
 
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
