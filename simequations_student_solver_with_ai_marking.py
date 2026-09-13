@@ -416,7 +416,7 @@ else:
         else:
             with st.spinner("Reviewing your workings..."):
                 try:
-                    # Generic Vision Prompt
+                    # Generic Vision Prompt with visual parsing instructions
                     color_sequence_str = ", ".join(COLOR_NAMES)
                     current_color_str = COLOR_NAMES[st.session_state.color_index]
                     
@@ -427,9 +427,12 @@ else:
                     The student is using a sequence of pen colors to show their progress and corrections over time. 
                     The full sequence of colors they cycle through is: {color_sequence_str}.
                     They are currently writing in: {current_color_str}.
-                    When reviewing their work, prioritize the most recent markups in the later pen colors (especially the current one), but do NOT disregard their previous markings in the earlier colors. You must read the whole sequence of work to understand their current thought process.
                     
-                    1. Evaluate their step-by-step math based entirely on what you see.
+                    CRITICAL VISUAL PARSING RULES:
+                    - Prioritize the most recent markups in the later pen colors (especially the current one), but read the whole sequence to understand their thought process.
+                    - IMPORTANT: If you see scribbles, zig-zags, strikethroughs, or cross-outs (especially in a newer color drawn over an older color), interpret this as the student DELETING or REJECTING that underlying work. Do NOT interpret scribbles as new mathematical operations (like minus signs, fraction bars, or numbers). Ignore the crossed-out workings when evaluating their final logic.
+                    
+                    1. Evaluate their step-by-step math based entirely on what you see, ignoring the deleted/crossed-out mistakes.
                     2. If their final answer is completely correct and explicitly stated, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
                     3. If their working is incorrect, incomplete, or they haven't found the final answer yet, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief hint on where they went wrong or what to do next. Do not give them the final answer.
                     """
