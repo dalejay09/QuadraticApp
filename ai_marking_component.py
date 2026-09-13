@@ -10,7 +10,7 @@ def render_grading_suite(
     bg_image, 
     height_px, 
     key_prefix="generic_marking", 
-    show_experimental_toolbar=True
+    show_experimental_toolbar=False
 ):
     """
     Encapsulated logic for problem canvas, markup, Undo/Clear, Photo Snap, and AI Grading.
@@ -85,10 +85,8 @@ def render_grading_suite(
             key=k(f"exp_toolbar_{st.session_state[EXP_TOOLBAR_KEY]}")
         )
 
-        # Detect the scribble intercept
         if toolbar_result.json_data is not None:
             objects = toolbar_result.json_data.get("objects", [])
-            # initial drawing has 9 objects. If more, the user tapped.
             if len(objects) > 9:
                 new_stroke = objects[-1]
                 stroke_center_x = new_stroke.get("left", 0) + (new_stroke.get("width", 0) * new_stroke.get("scaleX", 1) / 2)
@@ -116,9 +114,8 @@ def render_grading_suite(
                 st.session_state[EXP_TOOLBAR_KEY] += 1
                 st.rerun()
 
-    # --- 3. The Native Toolbar (Retained for comparison) ---
+    # --- 3. The Native Toolbar ---
     st.write("---")
-    st.caption("Native Toolbar Comparison")
     t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
     with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key=TOOL_SELECTOR_KEY)
     with t_col2:
@@ -152,12 +149,9 @@ def render_grading_suite(
     # --- Unified AI Processing ---
     camera_picture = None
     if st.session_state[CAMERA_STATE_KEY]:
-        # camera_mode specific to app, assumed shared state
         camera_picture = st.camera_input("Snap a photo:", key=k("cam_input")) if st.session_state.camera_mode == 'App' else st.file_uploader("Upload photo:", type=['png', 'jpg'], key=k("cam_input"))
 
     # THE UNIVERSAL CHRONOLOGICAL GRADING PROMPT
-    # We remove ALL TEXTUAL DOMAIN KNOWLEDGE from the app.py prompt block. 
-    # We only pass the physical chronological grading sequence rules.
     color_sequence_str = ", ".join(COLOR_NAMES)
     
     marking_prompt = f"""
@@ -186,14 +180,12 @@ def render_grading_suite(
         else:
             with st.spinner("Reviewing your workings..."):
                 try:
-                    # encapsulated connection fix
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     response = client.models.generate_content(
                         model='gemini-3.6-flash',
                         contents=[marking_prompt] + payload_images
                     )
                     
-                    # Process feedback
                     response_text = response.text.strip()
                     if response_text.upper().startswith("CORRECT"):
                         st.session_state[CORRECT_STATE_KEY] = True
@@ -203,7 +195,6 @@ def render_grading_suite(
                         st.session_state[CORRECT_STATE_KEY] = False
                         cleaned = re.sub(r'(?i)^INCORRECT:?\s*', '', response_text).strip()
                         st.session_state[FEEDBACK_KEY] = cleaned if cleaned else "Something doesn't look quite right. Give it another try!"
-                        # Parent App manages the overlying color index cycle
                         st.session_state.current_marking_color_index = (st.session_state.current_marking_color_index + 1) % len(PEN_COLORS)
                         
                     st.rerun()
