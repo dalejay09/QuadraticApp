@@ -308,7 +308,6 @@ if st.session_state.generating:
 
 else:
     eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = st.session_state.math_data
-    sol_str = ", ".join([f"{k} = {v}" for k, v in solutions.items()])
     
     st.write(f"Solve for **{', '.join(vars_list)}**! Current pen: **{COLOR_NAMES[st.session_state.color_index]}**")
 
@@ -323,62 +322,55 @@ else:
         key=f"canvas_{st.session_state.canvas_key}"
     )
 
-    # --- 2. EXPERIMENTAL Scribble Intercept Toolbar ---
-    st.caption("🔬 *Scribble Toolbar (Tap an icon!)*")
-    
-    # Generate static background layout with 5 distinct hit zones
-    icons = ["🖌️", "🧽", "↩️", "🗑️", "📸"]
-    toolbar_objects = []
-    for i, icon in enumerate(icons):
-        center_x = (i * 70) + 35
-        # The text icon
-        toolbar_objects.append({"type": "i-text", "text": icon, "left": center_x - 12, "top": 5, "fontSize": 24, "selectable": False})
-        # The separator line (except for the last one)
-        if i < 4:
-            toolbar_objects.append({"type": "line", "x1": (i+1)*70, "y1": 5, "x2": (i+1)*70, "y2": 40, "stroke": "#d1d5db", "strokeWidth": 2, "selectable": False})
+    # --- 2. EXPERIMENTAL Scribble Intercept Toolbar (Currently Disabled) ---
+    if False:
+        st.caption("🔬 *Scribble Toolbar (Tap an icon!)*")
+        icons = ["🖌️", "🧽", "↩️", "🗑️", "📸"]
+        toolbar_objects = []
+        for i, icon in enumerate(icons):
+            center_x = (i * 70) + 35
+            toolbar_objects.append({"type": "i-text", "text": icon, "left": center_x - 12, "top": 5, "fontSize": 24, "selectable": False})
+            if i < 4:
+                toolbar_objects.append({"type": "line", "x1": (i+1)*70, "y1": 5, "x2": (i+1)*70, "y2": 40, "stroke": "#d1d5db", "strokeWidth": 2, "selectable": False})
 
-    toolbar_initial = {"version": "4.4.0", "objects": toolbar_objects}
+        toolbar_initial = {"version": "4.4.0", "objects": toolbar_objects}
+        toolbar_result = st_canvas(
+            fill_color="rgba(0,0,0,0)", stroke_width=2, stroke_color="#007AFF", background_color="#f3f4f6", update_streamlit=True,
+            height=45, width=350, drawing_mode="freedraw", initial_drawing=toolbar_initial,
+            key=f"exp_toolbar_{st.session_state.experimental_toolbar_key}"
+        )
 
-    toolbar_result = st_canvas(
-        fill_color="rgba(0,0,0,0)", stroke_width=2, stroke_color="#007AFF", background_color="#f3f4f6", update_streamlit=True,
-        height=45, width=350, drawing_mode="freedraw", initial_drawing=toolbar_initial,
-        key=f"exp_toolbar_{st.session_state.experimental_toolbar_key}"
-    )
+        if toolbar_result.json_data is not None:
+            objects = toolbar_result.json_data.get("objects", [])
+            if len(objects) > 9:
+                new_stroke = objects[-1]
+                stroke_center_x = new_stroke.get("left", 0) + (new_stroke.get("width", 0) * new_stroke.get("scaleX", 1) / 2)
+                action = None
+                if 0 <= stroke_center_x < 70: action = "🖌️"
+                elif 70 <= stroke_center_x < 140: action = "🧽"
+                elif 140 <= stroke_center_x < 210: action = "↩️"
+                elif 210 <= stroke_center_x < 280: action = "🗑️"
+                elif 280 <= stroke_center_x <= 350: action = "📸"
+                
+                if action:
+                    st.toast(f"Toolbar Tapped: {action}")
+                    if action in ["🖌️", "🧽"]: st.session_state.tool_selector = action
+                    if action == "↩️" and len(st.session_state.stroke_history) > 1:
+                        st.session_state.stroke_history.pop()
+                        st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": st.session_state.stroke_history[-1]}
+                        st.session_state.canvas_key += 1
+                    if action == "🗑️":
+                        st.session_state.stroke_history, st.session_state.active_initial_drawing = [[]], {"version": "4.4.0", "objects": []}
+                        st.session_state.canvas_key += 1
+                    if action == "📸":
+                        st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
+                
+                st.session_state.experimental_toolbar_key += 1
+                st.rerun()
 
-    # Detect the scribble intercept
-    if toolbar_result.json_data is not None:
-        objects = toolbar_result.json_data.get("objects", [])
-        if len(objects) > 9:
-            new_stroke = objects[-1]
-            stroke_center_x = new_stroke.get("left", 0) + (new_stroke.get("width", 0) * new_stroke.get("scaleX", 1) / 2)
-            action = None
-            if 0 <= stroke_center_x < 70: action = "🖌️"
-            elif 70 <= stroke_center_x < 140: action = "🧽"
-            elif 140 <= stroke_center_x < 210: action = "↩️"
-            elif 210 <= stroke_center_x < 280: action = "🗑️"
-            elif 280 <= stroke_center_x <= 350: action = "📸"
-            
-            if action:
-                st.toast(f"Toolbar Tapped: {action}")
-                if action in ["🖌️", "🧽"]: st.session_state.tool_selector = action
-                if action == "↩️" and len(st.session_state.stroke_history) > 1:
-                    st.session_state.stroke_history.pop()
-                    st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": st.session_state.stroke_history[-1]}
-                    st.session_state.canvas_key += 1
-                if action == "🗑️":
-                    st.session_state.stroke_history, st.session_state.active_initial_drawing = [[]], {"version": "4.4.0", "objects": []}
-                    st.session_state.canvas_key += 1
-                if action == "📸":
-                    st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
-            
-            st.session_state.experimental_toolbar_key += 1
-            st.rerun()
-
-    # --- 3. The Native Toolbar (Retained for comparison) ---
-    st.write("---")
-    st.caption("Native Toolbar Comparison")
+    # --- 3. The Native Toolbar ---
     t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
-    with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key="tool_selector_native")
+    with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key="tool_selector")
     with t_col2:
         if st.button("↩️", use_container_width=True):
             if len(st.session_state.stroke_history) > 1:
@@ -390,7 +382,7 @@ else:
             st.session_state.stroke_history, st.session_state.active_initial_drawing, st.session_state.canvas_key = [[]], {"version": "4.4.0", "objects": []}, st.session_state.canvas_key + 1
             st.rerun()
     with t_col4:
-        if st.button("📸", use_container_width=True):
+        if st.button("📸 Paper", use_container_width=True):
             st.session_state.show_camera_supplement = not st.session_state.show_camera_supplement
             st.rerun()
             
@@ -424,13 +416,30 @@ else:
         else:
             with st.spinner("Reviewing your workings..."):
                 try:
+                    # Generic Vision Prompt
+                    color_sequence_str = ", ".join(COLOR_NAMES)
+                    current_color_str = COLOR_NAMES[st.session_state.color_index]
+                    
+                    generic_prompt = f"""
+                    You are an expert, encouraging math tutor grading a student's work.
+                    The problem to be solved is written on the provided canvas/image, along with the student's workings. Please deduce the question being solved directly from the image.
+                    
+                    The student is using a sequence of pen colors to show their progress and corrections over time. 
+                    The full sequence of colors they cycle through is: {color_sequence_str}.
+                    They are currently writing in: {current_color_str}.
+                    When reviewing their work, prioritize the most recent markups in the later pen colors (especially the current one), but do NOT disregard their previous markings in the earlier colors. You must read the whole sequence of work to understand their current thought process.
+                    
+                    1. Evaluate their step-by-step math based entirely on what you see.
+                    2. If their final answer is completely correct and explicitly stated, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
+                    3. If their working is incorrect, incomplete, or they haven't found the final answer yet, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief hint on where they went wrong or what to do next. Do not give them the final answer.
+                    """
+
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     response = client.models.generate_content(
                         model='gemini-3.6-flash',
-                        contents=[f"Grade the math problem presented in the images. Equations: Current canvas ink: {COLOR_NAMES[st.session_state.color_index]}. Most recent markup colors should be prioritised for corrections, but prior pens not discounted. If completely correct and states final answer, reply 'CORRECT:'. Else reply 'INCORRECT:' with a brief hint."] + payload_images
+                        contents=[generic_prompt] + payload_images
                     )
                     
-                    # FIX: Explicit Fallback for perfectly empty AI strings
                     response_text = response.text.strip()
                     if response_text.upper().startswith("CORRECT"):
                         st.session_state.is_correct = True
