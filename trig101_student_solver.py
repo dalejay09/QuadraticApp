@@ -140,8 +140,8 @@ def generate_trig_problem(topic_setting):
 
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg
 
-# --- Equation Generator for Identification ---
-def build_equations(problem_data):
+# --- Equation Generator with Mixed Trig Distractors for Both Mode ---
+def build_equations(problem_data, topic_setting):
     labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg = problem_data
     hyp_val = round(hyp_real, 1) if hyp_real % 1 != 0 else int(hyp_real)
     
@@ -151,34 +151,48 @@ def build_equations(problem_data):
         if sub_type == "hyp":
             correct = f"{t_disp} = √({opp_val}² + {adj_val}²)"
             distractor1 = f"{t_disp} = √({opp_val}² - {adj_val}²)"
-            distractor2 = f"{t_disp} = {opp_val}² + {adj_val}²"
+            if topic_setting == "Both":
+                # Include trigonometric equation distractor when in Both mode
+                trig_fn = random.choice(["sin", "cos", "tan"])
+                distractor2 = f"{t_disp} = {opp_val} / {trig_fn}({angle_deg}°)"
+            else:
+                distractor2 = f"{t_disp} = {opp_val}² + {adj_val}²"
         else:
             other_side = adj_val if labels['opp'] == target_var else opp_val
             correct = f"{t_disp} = √({hyp_val}² - {other_side}²)"
             distractor1 = f"{t_disp} = √({hyp_val}² + {other_side}²)"
-            distractor2 = f"{t_disp} = {hyp_val}² - {other_side}²"
+            if topic_setting == "Both":
+                trig_fn = random.choice(["sin", "cos", "tan"])
+                distractor2 = f"{t_disp} = {other_side} × {trig_fn}({angle_deg}°)"
+            else:
+                distractor2 = f"{t_disp} = {hyp_val}² - {other_side}²"
     else:
         base = rule_key.replace(" Inverse", "")
         fn = "sin" if base == "Sine" else ("cos" if base == "Cosine" else "tan")
+        
+        wrong_fn_map = {"sin": "cos", "cos": "tan", "tan": "sin"}
+        w_fn = wrong_fn_map[fn]
         
         if "Inverse" in rule_key:
             num = opp_val if base == "Sine" else (adj_val if base == "Cosine" else opp_val)
             den = hyp_val if base != "Tangent" else adj_val
             inv_fn = "sin⁻¹" if fn == "sin" else ("cos⁻¹" if fn == "cos" else "tan⁻¹")
+            w_inv_fn = "sin⁻¹" if w_fn == "sin" else ("cos⁻¹" if w_fn == "cos" else "tan⁻¹")
+            
             correct = f"{t_disp} = {inv_fn}({num} / {den})"
-            distractor1 = f"{t_disp} = {fn}({num} / {den})"
+            distractor1 = f"{t_disp} = {w_inv_fn}({num} / {den})"
             distractor2 = f"{t_disp} = {inv_fn}({den} / {num})"
         else:
             if labels['opp'] == target_var or labels['adj'] == target_var:
                 known_side = hyp_val if base != "Tangent" else (adj_val if base == "Sine" else opp_val)
                 correct = f"{t_disp} = {known_side} × {fn}({angle_deg}°)"
-                distractor1 = f"{t_disp} = {known_side} / {fn}({angle_deg}°)"
-                distractor2 = f"{t_disp} = {fn}⁻¹({known_side} / {angle_deg})"
+                distractor1 = f"{t_disp} = {known_side} × {w_fn}({angle_deg}°)"
+                distractor2 = f"{t_disp} = {known_side} / {fn}({angle_deg}°)"
             else:
                 known_side = opp_val if base == "Sine" else (adj_val if base == "Cosine" else opp_val)
                 correct = f"{t_disp} = {known_side} / {fn}({angle_deg}°)"
-                distractor1 = f"{t_disp} = {known_side} × {fn}({angle_deg}°)"
-                distractor2 = f"{t_disp} = {fn}({known_side} / {angle_deg}°)"
+                distractor1 = f"{t_disp} = {known_side} / {w_fn}({angle_deg}°)"
+                distractor2 = f"{t_disp} = {known_side} × {fn}({angle_deg}°)"
 
     return correct, distractor1, distractor2
 
@@ -381,7 +395,13 @@ else:
         st.write("Which mathematical rule/equation is required to solve this problem?")
         
         if st.session_state.id_style == "Function Names":
-            all_rules = ["Pythagoras", "Sine", "Cosine", "Tangent", "Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
+            if "Inverse" in rule_key:
+                trig_pool = ["Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
+            elif rule_key in ["Sine", "Cosine", "Tangent"]:
+                trig_pool = ["Sine", "Cosine", "Tangent"]
+            else:
+                trig_pool = ["Pythagoras", "Sine", "Cosine", "Tangent"]
+
             display_names = {
                 "Pythagoras": "Pythagoras",
                 "Sine": "sin",
@@ -394,7 +414,10 @@ else:
             correct_key = rule_key
             
             if 'id_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
-                incorrect_pool = [r for r in all_rules if r != correct_key]
+                incorrect_pool = [r for r in trig_pool if r != correct_key]
+                if len(incorrect_pool) < 2:
+                    all_rules = ["Pythagoras", "Sine", "Cosine", "Tangent", "Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
+                    incorrect_pool += [r for r in all_rules if r not in trig_pool and r != correct_key]
                 chosen_incorrect = random.sample(incorrect_pool, 2)
                 options = chosen_incorrect + [correct_key]
                 random.shuffle(options)
@@ -411,7 +434,7 @@ else:
                 if col.button(display_names[opt], use_container_width=True):
                     check_rule(opt)
         else:
-            correct_eq, dist1, dist2 = build_equations(st.session_state.trig_problem_data)
+            correct_eq, dist1, dist2 = build_equations(st.session_state.trig_problem_data, st.session_state.trig_topic)
             
             if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
                 options = [correct_eq, dist1, dist2]
