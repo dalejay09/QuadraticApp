@@ -7,7 +7,7 @@ import os
 import textwrap
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.subplots as plt
+import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 from PIL import Image
@@ -248,7 +248,6 @@ def generate_word_problem(level):
 # --- Visual Engine: UNIVERSAL MATPLOTLIB GEOMETRY ---
 def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
     labels, rule_key, ans, text_desc, (a, b), target_var, sub_type, hyp_real, angle_deg, l2_type, l2_label = problem_data
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
     ax.set_xlim(0, 1)
@@ -347,7 +346,6 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
 
 # --- Visual Engine: WORD PROBLEM MATPLOTLIB CANVAS ---
 def draw_word_problem_image(text, size_px=380):
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
     ax.set_xlim(0, 1)
