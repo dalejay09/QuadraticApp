@@ -134,11 +134,12 @@ def generate_trig_problem(topic_setting):
 
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var
 
-# --- Visual Engine: DYNAMIC MATPLOTLIB GEOMETRY ---
-def draw_triangle_image(problem_data, height_px=220, width_px=220):
+# --- Visual Engine: UNIFORM SQUARE MATPLOTLIB GEOMETRY ---
+def draw_triangle_image(problem_data, size_px=350):
     labels, rule_key, ans, text_desc, (a, b), target_var = problem_data
     
-    fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100)
+    # Strictly square dimensions to prevent right-angle skewing
+    fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -196,7 +197,6 @@ def draw_triangle_image(problem_data, height_px=220, width_px=220):
         if np.dot(normal, mid - np.array([0.5, 0.5])) < 0: normal = -normal
         pos = mid + normal * 0.06
         
-        # Calculate side gradient alignment and prevent upside-down text
         angle_deg = np.degrees(np.arctan2(vec[1], vec[0]))
         if angle_deg > 90:
             angle_deg -= 180
@@ -235,7 +235,6 @@ def create_pdf_bytes(topic_setting):
         except Exception as e:
             pass
         
-        # Page 1: Worksheet Grid (5 rows x 4 cols of triangle images)
         fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
         fig_ws.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05, wspace=0.2, hspace=0.3)
         fig_ws.suptitle("Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
@@ -244,13 +243,12 @@ def create_pdf_bytes(topic_setting):
             row, col = divmod(idx, 4)
             ax = axes[row, col]
             ax.axis('off')
-            img_buf = draw_triangle_image(p_data, height_px=180, width_px=180)
+            img_buf = draw_triangle_image(p_data, size_px=180)
             ax.imshow(img_buf)
             ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=2)
             
         pdf.savefig(fig_ws); plt.close(fig_ws)
 
-        # Page 2: Answer Key with compact text wrapping
         fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
         ax_ans.axis('off')
         ax_ans.text(0.5, 0.95, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
@@ -319,7 +317,7 @@ if st.session_state.generating:
     with st.spinner("Drawing geometry..."):
         p_data = generate_trig_problem(st.session_state.trig_topic)
         st.session_state.trig_problem_data = p_data
-        st.session_state.problem_image_context = draw_triangle_image(p_data, 450)
+        st.session_state.problem_image_context = draw_triangle_image(p_data, size_px=350)
         st.session_state.generating = False
         st.rerun()
 
@@ -369,7 +367,7 @@ else:
     else:
         ai_marking_component.render_grading_suite(
             bg_image=bg_image,
-            height_px=450,
+            height_px=350,
             key_prefix=f"trig_suite_{st.session_state.problem_suite_refresh_id}",
             solution_requirement=st.session_state.get('solution_req', 'demonstrated')
         )
