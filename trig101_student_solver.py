@@ -145,11 +145,9 @@ def generate_trig_problem(topic_setting, level="1"):
     
     if level == "2" and topic != "Pythagoras":
         if find_angle:
-            # If finding the angle, limit to direct equivalents so the target variable doesn't change meaning
             l2_type = random.choice(['parallel_Z', 'vertical_opp'])
             l2_label = f"{angle_var}"
         else:
-            # If finding a side, we can safely obfuscate the numerical angle
             l2_type = random.choice(['complement', 'supplementary', 'parallel_Z', 'vertical_opp'])
             if l2_type == 'complement':
                 l2_label = f"{90 - angle_deg}^\\circ"
@@ -160,7 +158,6 @@ def generate_trig_problem(topic_setting, level="1"):
             elif l2_type == 'vertical_opp':
                 l2_label = f"{angle_deg}^\\circ"
         
-        # Suppress the default internal angle label so only the external one draws
         labels['angle'] = ""
 
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg, l2_type, l2_label
@@ -231,7 +228,6 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
     ax.axis('off')
     ax.set_aspect('equal', adjustable='box')
     
-    # Define points in unrotated local space
     C = np.array([0.0, 0.0])
     A = np.array([b, 0.0])
     B = np.array([0.0, a])
@@ -246,15 +242,13 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
     extra_arcs = []
     
     if labels['angle']:
-        # Format: (Center, Pt1, Pt2, Label, ArcRadius, TextOffset)
         extra_arcs.append((A, C, B, labels['angle'], 0.28, 0.21))
         
     pts_to_fit = [transform(C), transform(A), transform(B)]
     
-    # Generate Level 2 auxiliary geometry with visibly larger distinct radii to prevent continuous illusion
+    # Generate Level 2 auxiliary geometry anchored consistently to Vertex A
     if l2_type == 'complement':
-        # The other interior acute angle is at vertex B
-        extra_arcs.append((B, C, A, l2_label, 0.28, 0.21))
+        extra_arcs.append((A, C, B, l2_label, 0.28, 0.21))
     elif l2_type == 'supplementary':
         A_ext = A + (A - C) * 0.7
         extra_lines.append((A, A_ext, '-'))
@@ -269,19 +263,17 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
         pts_to_fit.append(transform(A_ext1))
         pts_to_fit.append(transform(A_ext2))
     elif l2_type == 'parallel_Z':
-        B_ext1 = B + (C - A) * 0.7
-        B_ext2 = B + (A - C) * 0.7
-        extra_lines.append((B_ext1, B_ext2, '--'))
-        # Fix applied: Anchoring to B_ext2 (rightward) correctly maps the Z-angle transversal
-        extra_arcs.append((B, B_ext2, A, l2_label, 0.36, 0.28))
-        pts_to_fit.append(transform(B_ext1))
-        pts_to_fit.append(transform(B_ext2))
+        A_ext1 = A + (C - B) * 0.7
+        A_ext2 = A + (B - C) * 0.7
+        extra_lines.append((A_ext1, A_ext2, '--'))
+        extra_arcs.append((A, A_ext2, B, l2_label, 0.36, 0.28))
+        pts_to_fit.append(transform(A_ext1))
+        pts_to_fit.append(transform(A_ext2))
         
     pts = np.vstack(pts_to_fit)
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
     
-    # Reduced scale to 0.60 to ensure the expanded label_padding stays far from edges without clipping
     scale = 0.60 / max(max_pt - min_pt)
     
     def final_pt(pt):
@@ -294,19 +286,16 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
     triangle = plt.Polygon([Cf, Af, Bf], fill=False, edgecolor='black', linewidth=1.5)
     ax.add_patch(triangle)
     
-    # Draw right angle square
     vCA_f = (Af - Cf) / np.linalg.norm(Af - Cf) * 0.04
     vCB_f = (Bf - Cf) / np.linalg.norm(Bf - Cf) * 0.04
     sq_pts = [Cf + vCA_f, Cf + vCA_f + vCB_f, Cf + vCB_f]
     ax.plot([Cf[0]+vCA_f[0], sq_pts[1][0], sq_pts[2][0]], [Cf[1]+vCA_f[1], sq_pts[1][1], sq_pts[2][1]], color='black', lw=1)
     
-    # Draw auxiliary lines
     for (p1, p2, style) in extra_lines:
         p1f = final_pt(p1)
         p2f = final_pt(p2)
         ax.plot([p1f[0], p2f[0]], [p1f[1], p2f[1]], color='black', linestyle=style, lw=1.2)
         
-    # Draw universal arcs with variable radius mappings
     for (pt_c, pt_1, pt_2, label, r_arc, r_txt) in extra_arcs:
         cf = final_pt(pt_c)
         p1f = final_pt(pt_1)
@@ -327,7 +316,6 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
         txt_pos = cf + r_txt * np.array([np.cos(mid_rad), np.sin(mid_rad)])
         ax.text(txt_pos[0], txt_pos[1], f"${label}$", fontsize=11, ha='center', va='center')
 
-    # Heavy padding offset pushes side labels outward, safely away from vertex geometry
     def place_label(p1, p2, text):
         if not text: return
         mid = (p1 + p2) / 2
@@ -378,13 +366,11 @@ def create_pdf_bytes(topic_setting, level):
                     config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
                 )
                 for item in json.loads(response.text).get("solutions", []):
-                    # Replace JSON escaped string block '\n' with real python newlines \n for Matplotlib
                     cleaned_step = item["steps"].replace("**", "").replace(r"\n", "\n")
                     ai_steps[item["q_num"]] = cleaned_step
             except Exception as e:
                 pass
             
-            # Page 1: Worksheet Grid (5 rows x 4 cols)
             fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
             fig_ws.subplots_adjust(left=0.03, right=0.97, top=0.92, bottom=0.03, wspace=0.10, hspace=0.20)
             fig_ws.suptitle("Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
@@ -399,7 +385,6 @@ def create_pdf_bytes(topic_setting, level):
                 
             pdf.savefig(fig_ws); plt.close(fig_ws)
 
-            # Page 2: Answer Key with LaTeX formatting & proper line breaks
             fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
             ax_ans.axis('off')
             ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
