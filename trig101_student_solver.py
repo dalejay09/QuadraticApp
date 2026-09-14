@@ -58,22 +58,28 @@ def generate_trig_problem(topic_setting):
     adj_val = round(base_b, 1) if base_b % 1 != 0 else base_b
     hyp_val = round(hyp_real, 1) if hyp_real % 1 != 0 else int(hyp_real)
 
+    # Random variables for sides and angles
+    side_var = random.choice(['x', 'y', 'z', 'a', 'b', 'c', 'h', 'p', 'q'])
+    angle_var = random.choice([r'\theta', r'\alpha', r'\beta', r'\gamma', r'\phi', 'x', 'y'])
+
     labels = {'opp': '', 'adj': '', 'hyp': '', 'angle': ''}
     ans = 0
     text_desc = ""
+    target_var = ""
 
     if topic == "Pythagoras":
         rule = "Pythagoras"
         target = random.choice(['hyp', 'leg1', 'leg2'])
+        target_var = side_var
         if target == 'hyp':
-            labels['opp'], labels['adj'], labels['hyp'] = opp_val, adj_val, 'x'
-            ans, text_desc = hyp_val, f"Legs {opp_val}, {adj_val}. Find hyp x."
+            labels['opp'], labels['adj'], labels['hyp'] = opp_val, adj_val, side_var
+            ans, text_desc = hyp_val, f"Legs {opp_val}, {adj_val}. Find hyp {side_var}."
         elif target == 'leg1':
-            labels['opp'], labels['adj'], labels['hyp'] = 'x', adj_val, hyp_val
-            ans, text_desc = opp_val, f"Hyp {hyp_val}, Leg {adj_val}. Find leg x."
+            labels['opp'], labels['adj'], labels['hyp'] = side_var, adj_val, hyp_val
+            ans, text_desc = opp_val, f"Hyp {hyp_val}, Leg {adj_val}. Find leg {side_var}."
         else:
-            labels['opp'], labels['adj'], labels['hyp'] = opp_val, 'x', hyp_val
-            ans, text_desc = adj_val, f"Hyp {hyp_val}, Leg {opp_val}. Find leg x."
+            labels['opp'], labels['adj'], labels['hyp'] = opp_val, side_var, hyp_val
+            ans, text_desc = adj_val, f"Hyp {hyp_val}, Leg {opp_val}. Find leg {side_var}."
     
     else:
         rule = random.choice(["Sine", "Cosine", "Tangent"])
@@ -81,45 +87,51 @@ def generate_trig_problem(topic_setting):
         
         if rule == "Sine":
             if find_angle:
-                labels['opp'], labels['hyp'], labels['angle'] = opp_val, hyp_val, r'\theta'
-                ans, text_desc = angle_deg, f"Opp {opp_val}, Hyp {hyp_val}. Find angle theta."
+                target_var = angle_var
+                labels['opp'], labels['hyp'], labels['angle'] = opp_val, hyp_val, angle_var
+                ans, text_desc = angle_deg, f"Opp {opp_val}, Hyp {hyp_val}. Find angle {angle_var}."
             else:
+                target_var = side_var
                 if random.choice([True, False]):
-                    labels['opp'], labels['hyp'], labels['angle'] = 'x', hyp_val, f"{angle_deg}^\\circ"
-                    ans, text_desc = opp_val, f"Angle {angle_deg}, Hyp {hyp_val}. Find Opp x."
+                    labels['opp'], labels['hyp'], labels['angle'] = side_var, hyp_val, f"{angle_deg}^\\circ"
+                    ans, text_desc = opp_val, f"Angle {angle_deg}, Hyp {hyp_val}. Find Opp {side_var}."
                 else:
-                    labels['opp'], labels['hyp'], labels['angle'] = opp_val, 'x', f"{angle_deg}^\\circ"
-                    ans, text_desc = hyp_val, f"Angle {angle_deg}, Opp {opp_val}. Find Hyp x."
+                    labels['opp'], labels['hyp'], labels['angle'] = opp_val, side_var, f"{angle_deg}^\\circ"
+                    ans, text_desc = hyp_val, f"Angle {angle_deg}, Opp {opp_val}. Find Hyp {side_var}."
                     
         elif rule == "Cosine":
             if find_angle:
-                labels['adj'], labels['hyp'], labels['angle'] = adj_val, hyp_val, r'\theta'
-                ans, text_desc = angle_deg, f"Adj {adj_val}, Hyp {hyp_val}. Find angle theta."
+                target_var = angle_var
+                labels['adj'], labels['hyp'], labels['angle'] = adj_val, hyp_val, angle_var
+                ans, text_desc = angle_deg, f"Adj {adj_val}, Hyp {hyp_val}. Find angle {angle_var}."
             else:
+                target_var = side_var
                 if random.choice([True, False]):
-                    labels['adj'], labels['hyp'], labels['angle'] = 'x', hyp_val, f"{angle_deg}^\\circ"
-                    ans, text_desc = adj_val, f"Angle {angle_deg}, Hyp {hyp_val}. Find Adj x."
+                    labels['adj'], labels['hyp'], labels['angle'] = side_var, hyp_val, f"{angle_deg}^\\circ"
+                    ans, text_desc = adj_val, f"Angle {angle_deg}, Hyp {hyp_val}. Find Adj {side_var}."
                 else:
-                    labels['adj'], labels['hyp'], labels['angle'] = adj_val, 'x', f"{angle_deg}^\\circ"
-                    ans, text_desc = hyp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Hyp x."
+                    labels['adj'], labels['hyp'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
+                    ans, text_desc = hyp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Hyp {side_var}."
                     
         elif rule == "Tangent":
             if find_angle:
-                labels['opp'], labels['adj'], labels['angle'] = opp_val, adj_val, r'\theta'
-                ans, text_desc = angle_deg, f"Opp {opp_val}, Adj {adj_val}. Find angle theta."
+                target_var = angle_var
+                labels['opp'], labels['adj'], labels['angle'] = opp_val, adj_val, angle_var
+                ans, text_desc = angle_deg, f"Opp {opp_val}, Adj {adj_val}. Find angle {angle_var}."
             else:
+                target_var = side_var
                 if random.choice([True, False]):
-                    labels['opp'], labels['adj'], labels['angle'] = 'x', adj_val, f"{angle_deg}^\\circ"
-                    ans, text_desc = opp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Opp x."
+                    labels['opp'], labels['adj'], labels['angle'] = side_var, adj_val, f"{angle_deg}^\\circ"
+                    ans, text_desc = opp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Opp {side_var}."
                 else:
-                    labels['opp'], labels['adj'], labels['angle'] = opp_val, 'x', f"{angle_deg}^\\circ"
-                    ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj x."
+                    labels['opp'], labels['adj'], labels['angle'] = opp_val, side_var, f"{angle_deg}^\\circ"
+                    ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj {side_var}."
 
-    return labels, rule, ans, text_desc, (opp_val, adj_val)
+    return labels, rule, ans, text_desc, (opp_val, adj_val), target_var
 
 # --- Visual Engine: DYNAMIC MATPLOTLIB GEOMETRY ---
 def draw_triangle_image(problem_data, height_px):
-    labels, rule, ans, text_desc, (a, b) = problem_data
+    labels, rule, ans, text_desc, (a, b), target_var = problem_data
     
     fig, ax = plt.subplots(figsize=(3.5, height_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
@@ -212,7 +224,6 @@ def create_pdf_bytes(topic_setting):
         except Exception as e:
             pass
         
-        # We'd typically render images to the PDF here, simplified text version for brevity in this demo component
         fig, axes = plt.subplots(figsize=(8.27, 11.69))
         axes.axis('off')
         axes.text(0.5, 0.95, f"Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
@@ -239,6 +250,7 @@ if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
 if 'id_feedback' not in st.session_state: st.session_state.id_feedback = ""
+if 'current_marking_color_index' not in st.session_state: st.session_state.current_marking_color_index = 0
 
 def handle_settings_change():
     st.session_state.generating = True
@@ -281,14 +293,14 @@ if st.session_state.generating:
         st.rerun()
 
 else:
-    labels, rule, ans, text_desc, sides = st.session_state.trig_problem_data
+    labels, rule, ans, text_desc, sides, target_var = st.session_state.trig_problem_data
     bg_image = st.session_state.problem_image_context
 
-    st.write(f"**Find the missing value ($x$ or $\\theta$)!**")
+    st.write(f"**Find the missing value (${target_var}$)!**")
 
     if st.session_state.interaction_mode == "Identification":
         # MODE 1: IDENTIFICATION (Master App handles this purely)
-        st.image(bg_image, use_column_width=True)
+        st.image(bg_image, use_container_width=True)
         st.write("Which mathematical rule is required to solve this problem?")
         
         c1, c2, c3, c4 = st.columns(4)
@@ -319,7 +331,7 @@ else:
         
         universal_prompt = f"""
         You are an expert math tutor grading a student's Trigonometry/Geometry work.
-        The right-angled triangle problem to be solved is printed on the background image. Deduce the knowns and the unknown (x or theta) directly from the diagram.
+        The right-angled triangle problem to be solved is printed on the background image. Deduce the knowns and the unknown directly from the diagram.
         
         The student is using a sequence of pen colors: {color_sequence_str}.
         They are currently writing in: {current_color_str}.
