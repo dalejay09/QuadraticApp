@@ -136,7 +136,7 @@ def generate_trig_problem(topic_setting):
                     labels['opp'], labels['adj'], labels['angle'] = side_var, adj_val, f"{angle_deg}^\\circ"
                     ans, text_desc = opp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Opp {side_var}."
                 else:
-                    labels['opp'], labels['adj'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
+                    labels['opp'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj {side_var}."
 
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg
@@ -196,7 +196,7 @@ def build_equations(problem_data, topic_setting):
 
     return correct, distractor1, distractor2
 
-# --- Visual Engine: UNIFORM SQUARE MATPLOTLIB GEOMETRY (1.5x Experimental Scale) ---
+# --- Visual Engine: UNIFORM SQUARE MATPLOTLIB GEOMETRY ---
 def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     labels, rule_key, ans, text_desc, (a, b), target_var, sub_type, hyp_real, angle_deg = problem_data
     
@@ -220,7 +220,6 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
     
-    # 1.5x Experimental Scale (0.48 * 1.5 = 0.72)
     scale = 0.72 / max(max_pt - min_pt)
     
     Cf = (C_rot - center) * scale + [0.5, 0.5]
@@ -278,64 +277,69 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     buf.seek(0)
     return Image.open(buf).convert('RGBA').copy()
 
-# --- Worksheet PDF Generator ---
+# --- Worksheet PDF Generator with Exception Trap ---
 def create_pdf_bytes(topic_setting):
     from google import genai
     buffer = io.BytesIO()
-    with PdfPages(buffer) as pdf:
-        problems = [generate_trig_problem(topic_setting) for _ in range(20)]
-        ai_steps = {}
-        try:
-            client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-            payload = "".join([f"Q{i+1}: {p[3]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
-            prompt = (
-                "Write concise step-by-step solutions using standard plain text and symbols "
-                "(e.g., cos(58 deg) = z / 9.4 -> z = 9.4 * cos(58 deg) -> z ~= 5). "
-                "Use newline characters where necessary to keep lines short. Plain text only.\nData:\n" + payload
-            )
-            response = client.models.generate_content(
-                model='gemini-3.6-flash', contents=[prompt],
-                config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
-            )
-            for item in json.loads(response.text).get("solutions", []):
-                cleaned_step = item["steps"].replace("**", "")
-                ai_steps[item["q_num"]] = cleaned_step
-        except Exception as e:
-            pass
-        
-        # Page 1: Worksheet Grid (5 rows x 4 cols)
-        fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
-        fig_ws.subplots_adjust(left=0.03, right=0.97, top=0.92, bottom=0.03, wspace=0.10, hspace=0.20)
-        fig_ws.suptitle("Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
-        
-        for idx, p_data in enumerate(problems):
-            row, col = divmod(idx, 4)
-            ax = axes[row, col]
-            ax.axis('off')
-            img_buf = draw_triangle_image(p_data, size_px=220, label_padding=0.11)
-            ax.imshow(img_buf)
-            ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=1)
+    try:
+        with PdfPages(buffer) as pdf:
+            problems = [generate_trig_problem(topic_setting) for _ in range(20)]
+            ai_steps = {}
+            try:
+                client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                payload = "".join([f"Q{i+1}: {p[3]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
+                prompt = (
+                    "Write concise step-by-step solutions using standard plain text and symbols "
+                    "(e.g., cos(58 deg) = z / 9.4 -> z = 9.4 * cos(58 deg) -> z ~= 5). "
+                    "Use newline characters where necessary to keep lines short. Plain text only.\nData:\n" + payload
+                )
+                response = client.models.generate_content(
+                    model='gemini-3.6-flash', contents=[prompt],
+                    config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
+                )
+                for item in json.loads(response.text).get("solutions", []):
+                    cleaned_step = item["steps"].replace("**", "")
+                    ai_steps[item["q_num"]] = cleaned_step
+            except Exception as e:
+                pass
             
-        pdf.savefig(fig_ws); plt.close(fig_ws)
+            # Page 1: Worksheet Grid (5 rows x 4 cols)
+            fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
+            fig_ws.subplots_adjust(left=0.03, right=0.97, top=0.92, bottom=0.03, wspace=0.10, hspace=0.20)
+            fig_ws.suptitle("Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
+            
+            for idx, p_data in enumerate(problems):
+                row, col = divmod(idx, 4)
+                ax = axes[row, col]
+                ax.axis('off')
+                img_buf = draw_triangle_image(p_data, size_px=220, label_padding=0.11)
+                ax.imshow(img_buf)
+                ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=1)
+                
+            pdf.savefig(fig_ws); plt.close(fig_ws)
 
-        # Page 2: Answer Key safely formatted with standard text to prevent PDF renderer crashes
-        fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
-        ax_ans.axis('off')
-        ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
-        for i in range(10):
-            left_idx = i
-            right_idx = i + 10
-            step_l = ai_steps.get(left_idx+1, '')
-            step_r = ai_steps.get(right_idx+1, '')
-            
-            txt_l = f"Q{left_idx+1}: Ans: {problems[left_idx][2]}\n{step_l}"
-            txt_r = f"Q{right_idx+1}: Ans: {problems[right_idx][2]}\n{step_r}"
-            
-            y_pos = 0.90 - (i * 0.088)
-            ax_ans.text(0.04, y_pos, txt_l, fontsize=7.5, va='top', wrap=True)
-            ax_ans.text(0.52, y_pos, txt_r, fontsize=7.5, va='top', wrap=True)
-        pdf.savefig(fig_ans); plt.close(fig_ans)
+            # Page 2: Answer Key
+            fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
+            ax_ans.axis('off')
+            ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
+            for i in range(10):
+                left_idx = i
+                right_idx = i + 10
+                step_l = ai_steps.get(left_idx+1, '')
+                step_r = ai_steps.get(right_idx+1, '')
+                
+                txt_l = f"Q{left_idx+1}: Ans: {problems[left_idx][2]}\n{step_l}"
+                txt_r = f"Q{right_idx+1}: Ans: {problems[right_idx][2]}\n{step_r}"
+                
+                y_pos = 0.90 - (i * 0.088)
+                ax_ans.text(0.04, y_pos, txt_l, fontsize=7.5, va='top', wrap=True)
+                ax_ans.text(0.52, y_pos, txt_r, fontsize=7.5, va='top', wrap=True)
+            pdf.savefig(fig_ans); plt.close(fig_ans)
+    except Exception as e:
+        st.error(f"PDF Generation Error Details: {e}")
+        raise e
 
+    buffer.seek(0)
     return buffer.getvalue()
 
 # --- State Management with Environment / Secret Fallbacks ---
@@ -378,7 +382,10 @@ with col_actions:
         if st.session_state.pdf_bytes is None:
             if st.button("⚙️ Generate Worksheet PDF", use_container_width=True):
                 with st.spinner("Compiling Master PDF Grid..."):
-                    st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.trig_topic)
+                    try:
+                        st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.trig_topic)
+                    except Exception:
+                        st.session_state.pdf_bytes = None
                 st.rerun()
         else:
             timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
