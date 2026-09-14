@@ -6,6 +6,7 @@ import json
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import numpy as np
 from PIL import Image
 from matplotlib.backends.backend_pdf import PdfPages
@@ -53,12 +54,10 @@ def generate_trig_problem(topic_setting):
     angle_rad = math.atan2(base_a, base_b)
     angle_deg = round(math.degrees(angle_rad))
     
-    # We round sides to 1 decimal place for neatness if not whole numbers
     opp_val = round(base_a, 1) if base_a % 1 != 0 else base_a
     adj_val = round(base_b, 1) if base_b % 1 != 0 else base_b
     hyp_val = round(hyp_real, 1) if hyp_real % 1 != 0 else int(hyp_real)
 
-    # Random variables for sides and angles
     side_var = random.choice(['x', 'y', 'z', 'a', 'b', 'c', 'h', 'p', 'q'])
     angle_var = random.choice([r'\theta', r'\alpha', r'\beta', r'\gamma', r'\phi', 'x', 'y'])
 
@@ -66,9 +65,10 @@ def generate_trig_problem(topic_setting):
     ans = 0
     text_desc = ""
     target_var = ""
+    rule_key = ""
 
     if topic == "Pythagoras":
-        rule = "Pythagoras"
+        rule_key = "Pythagoras"
         target = random.choice(['hyp', 'leg1', 'leg2'])
         target_var = side_var
         if target == 'hyp':
@@ -82,10 +82,15 @@ def generate_trig_problem(topic_setting):
             ans, text_desc = adj_val, f"Hyp {hyp_val}, Leg {opp_val}. Find leg {side_var}."
     
     else:
-        rule = random.choice(["Sine", "Cosine", "Tangent"])
+        base_rule = random.choice(["Sine", "Cosine", "Tangent"])
         find_angle = random.choice([True, False])
         
-        if rule == "Sine":
+        if find_angle:
+            rule_key = f"{base_rule} Inverse"
+        else:
+            rule_key = base_rule
+            
+        if base_rule == "Sine":
             if find_angle:
                 target_var = angle_var
                 labels['opp'], labels['hyp'], labels['angle'] = opp_val, hyp_val, angle_var
@@ -99,7 +104,7 @@ def generate_trig_problem(topic_setting):
                     labels['opp'], labels['hyp'], labels['angle'] = opp_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = hyp_val, f"Angle {angle_deg}, Opp {opp_val}. Find Hyp {side_var}."
                     
-        elif rule == "Cosine":
+        elif base_rule == "Cosine":
             if find_angle:
                 target_var = angle_var
                 labels['adj'], labels['hyp'], labels['angle'] = adj_val, hyp_val, angle_var
@@ -113,7 +118,7 @@ def generate_trig_problem(topic_setting):
                     labels['adj'], labels['hyp'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = hyp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Hyp {side_var}."
                     
-        elif rule == "Tangent":
+        elif base_rule == "Tangent":
             if find_angle:
                 target_var = angle_var
                 labels['opp'], labels['adj'], labels['angle'] = opp_val, adj_val, angle_var
@@ -127,11 +132,11 @@ def generate_trig_problem(topic_setting):
                     labels['opp'], labels['adj'], labels['angle'] = opp_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj {side_var}."
 
-    return labels, rule, ans, text_desc, (opp_val, adj_val), target_var
+    return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var
 
 # --- Visual Engine: DYNAMIC MATPLOTLIB GEOMETRY ---
 def draw_triangle_image(problem_data, height_px):
-    labels, rule, ans, text_desc, (a, b), target_var = problem_data
+    labels, rule_key, ans, text_desc, (a, b), target_var = problem_data
     
     fig, ax = plt.subplots(figsize=(3.5, height_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
@@ -139,20 +144,16 @@ def draw_triangle_image(problem_data, height_px):
     ax.set_ylim(0, 1)
     ax.axis('off')
     
-    # THE FIX: Force physical aspect ratio to be exactly 1:1 so angles don't stretch
     ax.set_aspect('equal', adjustable='box')
     
-    # Base Triangle Vertices: C(right angle), A(angle theta), B
     C = np.array([0, 0])
     A = np.array([b, 0])
     B = np.array([0, a])
     
-    # Random Rotation
     theta = random.uniform(0, 2 * np.pi)
     R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
     C_rot, A_rot, B_rot = R.dot(C), R.dot(A), R.dot(B)
     
-    # Scale and center in the frame
     pts = np.vstack([C_rot, A_rot, B_rot])
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
@@ -162,44 +163,45 @@ def draw_triangle_image(problem_data, height_px):
     Af = (A_rot - center) * scale + [0.5, 0.5]
     Bf = (B_rot - center) * scale + [0.5, 0.5]
     
-    # Draw Triangle
     triangle = plt.Polygon([Cf, Af, Bf], fill=False, edgecolor='black', linewidth=2)
     ax.add_patch(triangle)
     
-    # Draw Right Angle Square at C
+    # Right Angle Square at C
     vCA = (Af - Cf) / np.linalg.norm(Af - Cf) * 0.05
     vCB = (Bf - Cf) / np.linalg.norm(Bf - Cf) * 0.05
     sq_pts = [Cf + vCA, Cf + vCA + vCB, Cf + vCB]
     ax.plot([Cf[0]+vCA[0], sq_pts[1][0], sq_pts[2][0]], [Cf[1]+vCA[1], sq_pts[1][1], sq_pts[2][1]], color='black', lw=1.5)
     
-    # Draw Angle Arc at A (if labeled)
+    # True Circular Arc for Angle at A
     if labels['angle']:
-        vAC = (Cf - Af) / np.linalg.norm(Cf - Af) * 0.1
-        vAB = (Bf - Af) / np.linalg.norm(Bf - Af) * 0.1
-        # Simple curve approximation for arc
-        arc_x = [Af[0] + vAC[0]*0.8, Af[0] + (vAC[0]+vAB[0])*0.6, Af[0] + vAB[0]*0.8]
-        arc_y = [Af[1] + vAC[1]*0.8, Af[1] + (vAC[1]+vAB[1])*0.6, Af[1] + vAB[1]*0.8]
-        ax.plot(arc_x, arc_y, color='black', lw=1.5)
-        # Place angle text slightly further inward
-        txt_pos = Af + (vAC + vAB) * 0.8
+        vAC = Cf - Af
+        vAB = Bf - Af
+        ang1 = np.degrees(np.arctan2(vAC[1], vAC[0]))
+        ang2 = np.degrees(np.arctan2(vAB[1], vAB[0]))
+        min_ang, max_ang = min(ang1, ang2), max(ang1, ang2)
+        if max_ang - min_ang > 180:
+            min_ang, max_ang = max_ang, min_ang + 360
+            
+        arc = patches.Arc(Af, 0.15, 0.15, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1.5)
+        ax.add_patch(arc)
+        
+        mid_rad = np.radians((min_ang + max_ang) / 2)
+        txt_pos = Af + 0.11 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
         ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=16, ha='center', va='center')
 
-    # Helper to place text outside the line
     def place_label(p1, p2, text):
         if not text: return
         mid = (p1 + p2) / 2
         vec = p2 - p1
-        # Normal vector pointing "outward" from the center of the triangle
         normal = np.array([-vec[1], vec[0]]) 
         normal = normal / np.linalg.norm(normal)
-        # Ensure normal points away from the opposing vertex (center of triangle approximation)
         if np.dot(normal, mid - np.array([0.5, 0.5])) < 0: normal = -normal
         pos = mid + normal * 0.06
         ax.text(pos[0], pos[1], f"${text}$", fontsize=16, ha='center', va='center')
 
-    place_label(Cf, Bf, labels['opp']) # Opposite to A
-    place_label(Cf, Af, labels['adj']) # Adjacent to A
-    place_label(Af, Bf, labels['hyp']) # Hypotenuse
+    place_label(Cf, Bf, labels['opp']) 
+    place_label(Cf, Af, labels['adj']) 
+    place_label(Af, Bf, labels['hyp']) 
 
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
@@ -296,32 +298,51 @@ if st.session_state.generating:
         st.rerun()
 
 else:
-    labels, rule, ans, text_desc, sides, target_var = st.session_state.trig_problem_data
+    labels, rule_key, ans, text_desc, sides, target_var = st.session_state.trig_problem_data
     bg_image = st.session_state.problem_image_context
 
     st.write(f"**Find the missing value (${target_var}$)!**")
 
     if st.session_state.interaction_mode == "Identification":
-        # MODE 1: IDENTIFICATION (Master App handles this purely)
+        # MODE 1: IDENTIFICATION (Random 3 choices including correct answer)
         st.image(bg_image, use_container_width=True)
         st.write("Which mathematical rule is required to solve this problem?")
         
-        c1, c2, c3, c4 = st.columns(4)
+        all_rules = ["Pythagoras", "Sine", "Cosine", "Tangent", "Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
+        display_names = {
+            "Pythagoras": "Pythagoras",
+            "Sine": "sin",
+            "Cosine": "cos",
+            "Tangent": "tan",
+            "Sine Inverse": "sin⁻¹",
+            "Cosine Inverse": "cos⁻¹",
+            "Tangent Inverse": "tan⁻¹"
+        }
+        
+        if 'id_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
+            incorrect_pool = [r for r in all_rules if r != rule_key]
+            chosen_incorrect = random.sample(incorrect_pool, 2)
+            options = chosen_incorrect + [rule_key]
+            random.shuffle(options)
+            st.session_state.id_options = options
+            st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
+
+        c1, c2, c3 = st.columns(3)
         def check_rule(guess):
-            if guess == rule: st.session_state.id_feedback = f"Correct! We use **{rule}** here."
+            if guess == rule_key: st.session_state.id_feedback = f"Correct! We use **{display_names[rule_key]}** here."
             else: st.session_state.id_feedback = f"Not quite. Try again!"
             
-        if c1.button("Pythagoras", use_container_width=True): check_rule("Pythagoras")
-        if c2.button("Sine", use_container_width=True): check_rule("Sine")
-        if c3.button("Cosine", use_container_width=True): check_rule("Cosine")
-        if c4.button("Tangent", use_container_width=True): check_rule("Tangent")
+        for idx, opt in enumerate(st.session_state.id_options):
+            col = [c1, c2, c3][idx]
+            if col.button(display_names[opt], use_container_width=True):
+                check_rule(opt)
         
         if st.session_state.id_feedback:
             if "Correct" in st.session_state.id_feedback: st.success(f"🌟 {st.session_state.id_feedback}")
             else: st.warning(f"🤖 {st.session_state.id_feedback}")
             
     else:
-        # MODE 2: SOLVE (Master App delegates to the Universal Marker Widget)
+        # MODE 2: SOLVE
         ai_marking_component.render_grading_suite(
             bg_image=bg_image,
             height_px=450,
