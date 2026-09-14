@@ -243,7 +243,6 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
         if max_ang - min_ang > 180:
             min_ang, max_ang = max_ang, min_ang + 360
             
-        # Further increased arc radius (0.28) and text position offset (0.21) for maximum clearance
         arc = patches.Arc(Af, 0.28, 0.28, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
         ax.add_patch(arc)
         
@@ -278,7 +277,7 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     buf.seek(0)
     return Image.open(buf).convert('RGBA').copy()
 
-# --- Worksheet PDF Generator with Experimental LaTeX Rendering ---
+# --- Worksheet PDF Generator with Clean Inverse Trig & Real Newlines ---
 def create_pdf_bytes(topic_setting):
     from google import genai
     buffer = io.BytesIO()
@@ -290,16 +289,18 @@ def create_pdf_bytes(topic_setting):
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                 payload = "".join([f"Q{i+1}: {p[3]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
                 prompt = (
-                    "Write concise step-by-step solutions using valid LaTeX math expressions enclosed in single dollar signs "
-                    "(e.g., $\\cos(58^\\circ) = z / 9.4$ -> $z = 9.4 \\times \\cos(58^\\circ)$ -> $z \\approx 5$). "
-                    "Use valid LaTeX commands only (like \\circ, \\times, \\approx, \\sqrt{}). Use newline characters where necessary.\nData:\n" + payload
+                    "Write concise step-by-step solutions using valid LaTeX math expressions enclosed in single dollar signs. "
+                    "CRITICAL: For inverse trigonometric functions, strictly use \\sin^{-1}, \\cos^{-1}, and \\tan^{-1} notation (DO NOT use arccos, arcsin, or arctan). "
+                    "Use \\n to separate steps so they break into new lines cleanly. "
+                    "Example format: $\\cos(58^\\circ) = z / 9.4$ \\n $z = 9.4 \\times \\cos(58^\\circ)$ \\n $z \\approx 5$. "
+                    "Data:\n" + payload
                 )
                 response = client.models.generate_content(
                     model='gemini-3.6-flash', contents=[prompt],
                     config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
                 )
                 for item in json.loads(response.text).get("solutions", []):
-                    cleaned_step = item["steps"].replace("**", "").replace("->", r"\rightarrow")
+                    cleaned_step = item["steps"].replace("**", "").replace(r"\n", "\n")
                     ai_steps[item["q_num"]] = cleaned_step
             except Exception as e:
                 pass
@@ -319,7 +320,7 @@ def create_pdf_bytes(topic_setting):
                 
             pdf.savefig(fig_ws); plt.close(fig_ws)
 
-            # Page 2: Answer Key with LaTeX formatting
+            # Page 2: Answer Key with LaTeX formatting & proper line breaks
             fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
             ax_ans.axis('off')
             ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
