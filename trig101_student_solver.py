@@ -3,6 +3,7 @@ import random
 import math
 import io
 import json
+import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -140,7 +141,7 @@ def generate_trig_problem(topic_setting):
 
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg
 
-# --- Equation Generator with Mixed Trig Distractors for Both Mode ---
+# --- Equation Generator with Randomized Distractors ---
 def build_equations(problem_data, topic_setting):
     labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg = problem_data
     hyp_val = round(hyp_real, 1) if hyp_real % 1 != 0 else int(hyp_real)
@@ -152,7 +153,6 @@ def build_equations(problem_data, topic_setting):
             correct = f"{t_disp} = √({opp_val}² + {adj_val}²)"
             distractor1 = f"{t_disp} = √({opp_val}² - {adj_val}²)"
             if topic_setting == "Both":
-                # Include trigonometric equation distractor when in Both mode
                 trig_fn = random.choice(["sin", "cos", "tan"])
                 distractor2 = f"{t_disp} = {opp_val} / {trig_fn}({angle_deg}°)"
             else:
@@ -324,13 +324,24 @@ def create_pdf_bytes(topic_setting):
 
     return buffer.getvalue()
 
-# --- State Management ---
+# --- State Management with Environment / Secret Fallbacks ---
 if 'generating' not in st.session_state: st.session_state.generating = True
-if 'trig_topic' not in st.session_state: st.session_state.trig_topic = "Both"
-if 'interaction_mode' not in st.session_state: st.session_state.interaction_mode = "Solve"
-if 'solution_req' not in st.session_state: st.session_state.solution_req = "demonstrated"
-if 'id_style' not in st.session_state: st.session_state.id_style = "Function Names"
-if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
+
+if 'trig_topic' not in st.session_state:
+    st.session_state.trig_topic = os.getenv("TRIG_TOPIC", st.secrets.get("TRIG_TOPIC", "Both"))
+
+if 'interaction_mode' not in st.session_state:
+    st.session_state.interaction_mode = os.getenv("INTERACTION_MODE", st.secrets.get("INTERACTION_MODE", "Solve"))
+
+if 'solution_req' not in st.session_state:
+    st.session_state.solution_req = os.getenv("SOLUTION_REQ", st.secrets.get("SOLUTION_REQ", "demonstrated"))
+
+if 'id_style' not in st.session_state:
+    st.session_state.id_style = os.getenv("ID_STYLE", st.secrets.get("ID_STYLE", "Function Names"))
+
+if 'camera_mode' not in st.session_state:
+    st.session_state.camera_mode = os.getenv("CAMERA_MODE", st.secrets.get("CAMERA_MODE", "App"))
+
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
 if 'id_feedback' not in st.session_state: st.session_state.id_feedback = ""
@@ -395,13 +406,7 @@ else:
         st.write("Which mathematical rule/equation is required to solve this problem?")
         
         if st.session_state.id_style == "Function Names":
-            if "Inverse" in rule_key:
-                trig_pool = ["Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
-            elif rule_key in ["Sine", "Cosine", "Tangent"]:
-                trig_pool = ["Sine", "Cosine", "Tangent"]
-            else:
-                trig_pool = ["Pythagoras", "Sine", "Cosine", "Tangent"]
-
+            all_possible_rules = ["Pythagoras", "Sine", "Cosine", "Tangent", "Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
             display_names = {
                 "Pythagoras": "Pythagoras",
                 "Sine": "sin",
@@ -413,15 +418,20 @@ else:
             }
             correct_key = rule_key
             
-            if 'id_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
-                incorrect_pool = [r for r in trig_pool if r != correct_key]
-                if len(incorrect_pool) < 2:
-                    all_rules = ["Pythagoras", "Sine", "Cosine", "Tangent", "Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
-                    incorrect_pool += [r for r in all_rules if r not in trig_pool and r != correct_key]
-                chosen_incorrect = random.sample(incorrect_pool, 2)
-                options = chosen_incorrect + [correct_key]
+            if 'id_options' not in st.session_state or st.session_state.get('last_refresh_id'] != st.session_state.problem_suite_refresh_id:
+                # Randomize distribution: 50% chance of 1 correct / 2 incorrect, 50% chance of 2 correct-variants / 1 incorrect
+                other_rules = [r for r in all_possible_rules if r != correct_key]
+                if random.random() < 0.5 and len(other_rules) >= 2:
+                    # 1 correct, 2 completely random distractors from different rules
+                    chosen_incorrect = random.sample(other_rules, 2)
+                    options = chosen_incorrect + [correct_key]
+                else:
+                    # Mix from family or general pool
+                    chosen_incorrect = random.sample(other_rules, 1)
+                    options = chosen_incorrect + [correct_key, correct_key] if random.random() < 0.5 else chosen_incorrect + [correct_key, random.choice(other_rules)]
+                
                 random.shuffle(options)
-                st.session_state.id_options = options
+                st.session_state.id_options = options[:3] # Ensure strictly 3 buttons
                 st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
 
             c1, c2, c3 = st.columns(3)
@@ -431,15 +441,21 @@ else:
                 
             for idx, opt in enumerate(st.session_state.id_options):
                 col = [c1, c2, c3][idx]
-                if col.button(display_names[opt], use_container_width=True):
+                if col.button(display_names[opt], use_container_width=True, key=f"fn_btn_{idx}"):
                     check_rule(opt)
         else:
             correct_eq, dist1, dist2 = build_equations(st.session_state.trig_problem_data, st.session_state.trig_topic)
             
             if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
-                options = [correct_eq, dist1, dist2]
+                # Randomize distribution for equations as well
+                eq_pool = [correct_eq, dist1, dist2]
+                if random.random() < 0.5:
+                    options = [correct_eq, dist1, dist2]
+                else:
+                    options = [correct_eq, correct_eq if random.random() < 0.5 else dist1, dist2]
+                
                 random.shuffle(options)
-                st.session_state.id_eq_options = options
+                st.session_state.id_eq_options = options[:3]
                 st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
 
             c1, c2, c3 = st.columns(3)
@@ -449,7 +465,7 @@ else:
 
             for idx, opt in enumerate(st.session_state.id_eq_options):
                 col = [c1, c2, c3][idx]
-                if col.button(opt, use_container_width=True):
+                if col.button(opt, use_container_width=True, key=f"eq_btn_{idx}"):
                     check_eq(opt)
         
         if st.session_state.id_feedback:
