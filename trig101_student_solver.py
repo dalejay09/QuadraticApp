@@ -219,7 +219,7 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     pts = np.vstack([C_rot, A_rot, B_rot])
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
-    scale = 0.50 / max(max_pt - min_pt)
+    scale = 0.48 / max(max_pt - min_pt)
     
     Cf = (C_rot - center) * scale + [0.5, 0.5]
     Af = (A_rot - center) * scale + [0.5, 0.5]
@@ -242,11 +242,12 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
         if max_ang - min_ang > 180:
             min_ang, max_ang = max_ang, min_ang + 360
             
-        arc = patches.Arc(Af, 0.16, 0.16, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
+        # Increased arc radius and text positioning offset to prevent crowding
+        arc = patches.Arc(Af, 0.22, 0.22, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
         ax.add_patch(arc)
         
         mid_rad = np.radians((min_ang + max_ang) / 2)
-        txt_pos = Af + 0.12 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
+        txt_pos = Af + 0.16 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
         ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=11, ha='center', va='center')
 
     def place_label(p1, p2, text):
@@ -301,7 +302,7 @@ def create_pdf_bytes(topic_setting):
         except Exception as e:
             pass
         
-        # Page 1: Worksheet Grid (5 rows x 4 cols with increased scaling & padding)
+        # Page 1: Worksheet Grid (5 rows x 4 cols with increased padding)
         fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
         fig_ws.subplots_adjust(left=0.03, right=0.97, top=0.92, bottom=0.03, wspace=0.10, hspace=0.20)
         fig_ws.suptitle("Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
@@ -310,7 +311,7 @@ def create_pdf_bytes(topic_setting):
             row, col = divmod(idx, 4)
             ax = axes[row, col]
             ax.axis('off')
-            img_buf = draw_triangle_image(p_data, size_px=210, label_padding=0.10)
+            img_buf = draw_triangle_image(p_data, size_px=220, label_padding=0.11)
             ax.imshow(img_buf)
             ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=1)
             
