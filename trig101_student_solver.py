@@ -37,7 +37,7 @@ st.markdown("""
 # --- AI Output Schemas for Worksheets ---
 class SolutionRow(BaseModel):
     q_num: int = Field(description="The question number (1 to 20)")
-    steps: str = Field(description="Step-by-step solving method using plain text symbols")
+    steps: str = Field(description="Step-by-step solving method using valid LaTeX formatting")
 
 class AIWorksheetSolutions(BaseModel):
     solutions: list[SolutionRow]
@@ -243,12 +243,12 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
         if max_ang - min_ang > 180:
             min_ang, max_ang = max_ang, min_ang + 360
             
-        # Increased arc radius and text positioning offset for greater clearance
-        arc = patches.Arc(Af, 0.26, 0.26, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
+        # Further increased arc radius (0.28) and text position offset (0.21) for maximum clearance
+        arc = patches.Arc(Af, 0.28, 0.28, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
         ax.add_patch(arc)
         
         mid_rad = np.radians((min_ang + max_ang) / 2)
-        txt_pos = Af + 0.19 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
+        txt_pos = Af + 0.21 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
         ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=11, ha='center', va='center')
 
     def place_label(p1, p2, text):
@@ -278,7 +278,7 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     buf.seek(0)
     return Image.open(buf).convert('RGBA').copy()
 
-# --- Worksheet PDF Generator with Clean Plain Text Formatting ---
+# --- Worksheet PDF Generator with Experimental LaTeX Rendering ---
 def create_pdf_bytes(topic_setting):
     from google import genai
     buffer = io.BytesIO()
@@ -290,16 +290,16 @@ def create_pdf_bytes(topic_setting):
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                 payload = "".join([f"Q{i+1}: {p[3]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
                 prompt = (
-                    "Write concise step-by-step solutions using clear plain text and symbols "
-                    "(e.g., cos(58 deg) = z / 9.4 -> z = 9.4 * cos(58 deg) -> z ~= 5). "
-                    "Use newline characters where necessary to keep lines short. Plain text only.\nData:\n" + payload
+                    "Write concise step-by-step solutions using valid LaTeX math expressions enclosed in single dollar signs "
+                    "(e.g., $\\cos(58^\\circ) = z / 9.4$ -> $z = 9.4 \\times \\cos(58^\\circ)$ -> $z \\approx 5$). "
+                    "Use valid LaTeX commands only (like \\circ, \\times, \\approx, \\sqrt{}). Use newline characters where necessary.\nData:\n" + payload
                 )
                 response = client.models.generate_content(
                     model='gemini-3.6-flash', contents=[prompt],
                     config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
                 )
                 for item in json.loads(response.text).get("solutions", []):
-                    cleaned_step = item["steps"].replace("**", "")
+                    cleaned_step = item["steps"].replace("**", "").replace("->", r"\rightarrow")
                     ai_steps[item["q_num"]] = cleaned_step
             except Exception as e:
                 pass
@@ -319,7 +319,7 @@ def create_pdf_bytes(topic_setting):
                 
             pdf.savefig(fig_ws); plt.close(fig_ws)
 
-            # Page 2: Answer Key (Plain text formatting avoids math renderer leaks and wrapping bugs)
+            # Page 2: Answer Key with LaTeX formatting
             fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
             ax_ans.axis('off')
             ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
@@ -333,8 +333,8 @@ def create_pdf_bytes(topic_setting):
                 txt_r = f"Q{right_idx+1}: Ans: {problems[right_idx][2]}\n{step_r}"
                 
                 y_pos = 0.90 - (i * 0.088)
-                ax_ans.text(0.04, y_pos, txt_l, fontsize=7.5, va='top', wrap=True)
-                ax_ans.text(0.52, y_pos, txt_r, fontsize=7.5, va='top', wrap=True)
+                ax_ans.text(0.04, y_pos, txt_l, fontsize=7.0, va='top', wrap=True)
+                ax_ans.text(0.52, y_pos, txt_r, fontsize=7.0, va='top', wrap=True)
             pdf.savefig(fig_ans); plt.close(fig_ans)
     except Exception as e:
         st.error(f"PDF Generation Error Details: {e}")
