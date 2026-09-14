@@ -246,7 +246,6 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
         
     pts_to_fit = [transform(C), transform(A), transform(B)]
     
-    # Generate Level 2 auxiliary geometry anchored consistently to Vertex A
     if l2_type == 'complement':
         extra_arcs.append((A, C, B, l2_label, 0.28, 0.21))
     elif l2_type == 'supplementary':
@@ -511,15 +510,10 @@ else:
             
             if 'id_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
                 other_rules = [r for r in all_possible_rules if r != correct_key]
-                if random.random() < 0.5 and len(other_rules) >= 2:
-                    chosen_incorrect = random.sample(other_rules, 2)
-                    options = chosen_incorrect + [correct_key]
-                else:
-                    chosen_incorrect = random.sample(other_rules, 1)
-                    options = chosen_incorrect + [correct_key, correct_key] if random.random() < 0.5 else chosen_incorrect + [correct_key, random.choice(other_rules)]
-                
+                chosen_incorrect = random.sample(other_rules, 2)
+                options = chosen_incorrect + [correct_key]
                 random.shuffle(options)
-                st.session_state.id_options = options[:3]
+                st.session_state.id_options = options
                 st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
 
             c1, c2, c3 = st.columns(3)
@@ -535,14 +529,9 @@ else:
             correct_eq, dist1, dist2 = build_equations(st.session_state.trig_problem_data, st.session_state.trig_topic)
             
             if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
-                eq_pool = [correct_eq, dist1, dist2]
-                if random.random() < 0.5:
-                    options = [correct_eq, dist1, dist2]
-                else:
-                    options = [correct_eq, correct_eq if random.random() < 0.5 else dist1, dist2]
-                
+                options = [correct_eq, dist1, dist2]
                 random.shuffle(options)
-                st.session_state.id_eq_options = options[:3]
+                st.session_state.id_eq_options = options
                 st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
 
             c1, c2, c3 = st.columns(3)
