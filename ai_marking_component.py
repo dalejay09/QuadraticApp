@@ -36,6 +36,7 @@ def render_grading_suite(
     if 'current_marking_color_index' not in st.session_state:
         st.session_state.current_marking_color_index = 0
         
+    # Ensure initialization happens first before any state lookups
     if k("init") not in st.session_state or st.session_state[k("init")] == False:
         st.session_state[FEEDBACK_KEY] = ""
         st.session_state[CANVAS_KEY] = 0
@@ -131,8 +132,8 @@ def render_grading_suite(
     if len(current_objects) > len(st.session_state[STROKE_HIST_KEY][-1]):
         if current_objects[-1].get("stroke", "").upper() == "#FFFFFE":
             e = current_objects[-1]
-            E_L, E_R, E_T, E_B = e.get("left",0)-15, e.get("left",0)+(e.get("width",0)*e.get("scaleX",1))+15, e.get("top",0)-15, e.get("top",0)+(e.get("height",0)*e.get("scaleX",1))+15
-            objects_to_keep = [obj for obj in st.session_state[STROKE_HIST_KEY][-1] if not (E_R < obj.get("left",0) or E_L > obj.get("left",0)+(obj.get("width",0)*obj.get("scaleX",1)) or E_B < obj.get("top",0) or E_T > obj.get("top",0)+(obj.get("height",0)*obj.get("scaleX",1)))]
+            E_L, E_R, E_T, E_B = e.get("left",0)-15, e.get("left",0)+(e.get("width",0)*e.get("scaleX",1))+15, e.get("top",0)-15, e.get("top",0)+(e.get("height",0)*e.get("scaleY",1))+15
+            objects_to_keep = [obj for obj in st.session_state[STROKE_HIST_KEY][-1] if not (E_R < obj.get("left",0) or E_L > obj.get("left",0)+(obj.get("width",0)*obj.get("scaleX",1)) or E_B < obj.get("top",0) or E_T > obj.get("top",0)+(obj.get("height",0)*obj.get("scaleY",1)))]
             st.session_state[STROKE_HIST_KEY].append(objects_to_keep)
             st.session_state[INITIAL_DWG_KEY], st.session_state[CANVAS_KEY] = {"version": "4.4.0", "objects": objects_to_keep}, st.session_state[CANVAS_KEY] + 1
             st.rerun()
@@ -145,7 +146,6 @@ def render_grading_suite(
 
     color_sequence_str = ", ".join(COLOR_NAMES)
     
-    # REFINED REQUIREMENT PROMPT
     if solution_requirement == "numeric":
         requirement_rule = (
             "- REQUIREMENT (NUMERIC STRICT): The student MUST fully calculate out the final decimal number (e.g., evaluating square roots like sqrt(170) into a decimal like 13.04, or evaluating trigonometric fractions into a final number). "

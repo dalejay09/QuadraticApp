@@ -268,6 +268,7 @@ st.title("Trigonometry 101")
 col_actions, col_set = st.columns([5, 1])
 with col_actions:
     with st.popover("📄 Worksheet Actions", use_container_width=True):
+        st.markdown("**1. Create a physical worksheet**")
         if st.session_state.pdf_bytes is None:
             if st.button("⚙️ Generate Worksheet PDF", use_container_width=True):
                 with st.spinner("Compiling Master PDF..."):
@@ -278,6 +279,10 @@ with col_actions:
             if st.button("🗑️ Clear / Reset PDF", use_container_width=True):
                 st.session_state.pdf_bytes = None
                 st.rerun()
+        st.markdown("---")
+        st.markdown("**2. Grade student workings**")
+        if "WORKSHEET_MARKER_APP_URL" in st.secrets:
+            st.link_button("🤖 Mark My Worksheet", st.secrets["WORKSHEET_MARKER_APP_URL"], use_container_width=True)
 
 with col_set:
     with st.popover("⚙️", use_container_width=True):
@@ -340,7 +345,6 @@ else:
             else: st.warning(f"🤖 {st.session_state.id_feedback}")
             
     else:
-        # MODE 2: SOLVE (Pass solution_requirement setting down to marker suite)
         ai_marking_component.render_grading_suite(
             bg_image=bg_image,
             height_px=450,
