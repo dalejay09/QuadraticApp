@@ -136,7 +136,7 @@ def generate_trig_problem(topic_setting):
                     labels['opp'], labels['adj'], labels['angle'] = side_var, adj_val, f"{angle_deg}^\\circ"
                     ans, text_desc = opp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Opp {side_var}."
                 else:
-                    labels['opp'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
+                    labels['opp'], labels['adj'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj {side_var}."
 
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg
@@ -243,11 +243,12 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
         if max_ang - min_ang > 180:
             min_ang, max_ang = max_ang, min_ang + 360
             
-        arc = patches.Arc(Af, 0.22, 0.22, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
+        # Increased arc radius and text positioning offset for greater clearance
+        arc = patches.Arc(Af, 0.26, 0.26, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
         ax.add_patch(arc)
         
         mid_rad = np.radians((min_ang + max_ang) / 2)
-        txt_pos = Af + 0.16 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
+        txt_pos = Af + 0.19 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
         ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=11, ha='center', va='center')
 
     def place_label(p1, p2, text):
@@ -277,7 +278,7 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     buf.seek(0)
     return Image.open(buf).convert('RGBA').copy()
 
-# --- Worksheet PDF Generator with Exception Trap ---
+# --- Worksheet PDF Generator with Clean Plain Text Formatting ---
 def create_pdf_bytes(topic_setting):
     from google import genai
     buffer = io.BytesIO()
@@ -289,7 +290,7 @@ def create_pdf_bytes(topic_setting):
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                 payload = "".join([f"Q{i+1}: {p[3]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
                 prompt = (
-                    "Write concise step-by-step solutions using standard plain text and symbols "
+                    "Write concise step-by-step solutions using clear plain text and symbols "
                     "(e.g., cos(58 deg) = z / 9.4 -> z = 9.4 * cos(58 deg) -> z ~= 5). "
                     "Use newline characters where necessary to keep lines short. Plain text only.\nData:\n" + payload
                 )
@@ -318,7 +319,7 @@ def create_pdf_bytes(topic_setting):
                 
             pdf.savefig(fig_ws); plt.close(fig_ws)
 
-            # Page 2: Answer Key
+            # Page 2: Answer Key (Plain text formatting avoids math renderer leaks and wrapping bugs)
             fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
             ax_ans.axis('off')
             ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
