@@ -37,7 +37,7 @@ st.markdown("""
 # --- AI Output Schemas for Worksheets ---
 class SolutionRow(BaseModel):
     q_num: int = Field(description="The question number (1 to 20)")
-    steps: str = Field(description="Step-by-step solving method formatted in clean LaTeX syntax")
+    steps: str = Field(description="Step-by-step solving method using plain text symbols")
 
 class AIWorksheetSolutions(BaseModel):
     solutions: list[SolutionRow]
@@ -220,7 +220,7 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
     
-    # Experimentally scaled up by 1.5x (0.48 * 1.5 = 0.72)
+    # 1.5x Experimental Scale (0.48 * 1.5 = 0.72)
     scale = 0.72 / max(max_pt - min_pt)
     
     Cf = (C_rot - center) * scale + [0.5, 0.5]
@@ -289,16 +289,16 @@ def create_pdf_bytes(topic_setting):
             client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
             payload = "".join([f"Q{i+1}: {p[3]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
             prompt = (
-                "Write concise step-by-step solutions using LaTeX mathematical formatting inside dollar signs "
-                "(e.g., $\\cos(58^\\circ) = z / 9.4 \\rightarrow z = 9.4 \\times \\cos(58^\\circ) \\rightarrow z \\approx 5$). "
-                "Use newline characters where necessary to keep lines short. Plain text with LaTeX tags.\nData:\n" + payload
+                "Write concise step-by-step solutions using standard plain text and symbols "
+                "(e.g., cos(58 deg) = z / 9.4 -> z = 9.4 * cos(58 deg) -> z ~= 5). "
+                "Use newline characters where necessary to keep lines short. Plain text only.\nData:\n" + payload
             )
             response = client.models.generate_content(
                 model='gemini-3.6-flash', contents=[prompt],
                 config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
             )
             for item in json.loads(response.text).get("solutions", []):
-                cleaned_step = item["steps"].replace("**", "").replace("->", r"\rightarrow")
+                cleaned_step = item["steps"].replace("**", "")
                 ai_steps[item["q_num"]] = cleaned_step
         except Exception as e:
             pass
@@ -318,7 +318,7 @@ def create_pdf_bytes(topic_setting):
             
         pdf.savefig(fig_ws); plt.close(fig_ws)
 
-        # Page 2: Answer Key with LaTeX formatting support
+        # Page 2: Answer Key safely formatted with standard text to prevent PDF renderer crashes
         fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
         ax_ans.axis('off')
         ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
