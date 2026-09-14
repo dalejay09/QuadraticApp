@@ -196,7 +196,7 @@ def build_equations(problem_data, topic_setting):
 
     return correct, distractor1, distractor2
 
-# --- Visual Engine: UNIFORM SQUARE MATPLOTLIB GEOMETRY ---
+# --- Visual Engine: UNIFORM SQUARE MATPLOTLIB GEOMETRY (1.5x Experimental Scale) ---
 def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     labels, rule_key, ans, text_desc, (a, b), target_var, sub_type, hyp_real, angle_deg = problem_data
     
@@ -219,7 +219,9 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     pts = np.vstack([C_rot, A_rot, B_rot])
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
-    scale = 0.48 / max(max_pt - min_pt)
+    
+    # Experimentally scaled up by 1.5x (0.48 * 1.5 = 0.72)
+    scale = 0.72 / max(max_pt - min_pt)
     
     Cf = (C_rot - center) * scale + [0.5, 0.5]
     Af = (A_rot - center) * scale + [0.5, 0.5]
@@ -242,7 +244,6 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
         if max_ang - min_ang > 180:
             min_ang, max_ang = max_ang, min_ang + 360
             
-        # Increased arc radius and text positioning offset to prevent crowding
         arc = patches.Arc(Af, 0.22, 0.22, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
         ax.add_patch(arc)
         
@@ -302,7 +303,7 @@ def create_pdf_bytes(topic_setting):
         except Exception as e:
             pass
         
-        # Page 1: Worksheet Grid (5 rows x 4 cols with increased padding)
+        # Page 1: Worksheet Grid (5 rows x 4 cols)
         fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
         fig_ws.subplots_adjust(left=0.03, right=0.97, top=0.92, bottom=0.03, wspace=0.10, hspace=0.20)
         fig_ws.suptitle("Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
