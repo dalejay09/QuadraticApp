@@ -135,7 +135,7 @@ def generate_trig_problem(topic_setting):
                     labels['opp'], labels['adj'], labels['angle'] = side_var, adj_val, f"{angle_deg}^\\circ"
                     ans, text_desc = opp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Opp {side_var}."
                 else:
-                    labels['opp'], labels['adj'], labels['angle'] = opp_val, side_var, f"{angle_deg}^\\circ"
+                    labels['opp'], labels['adj'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj {side_var}."
 
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg
@@ -145,7 +145,6 @@ def build_equations(problem_data):
     labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg = problem_data
     hyp_val = round(hyp_real, 1) if hyp_real % 1 != 0 else int(hyp_real)
     
-    # Clean display string for target variable
     t_disp = target_var.replace(r'\theta', 'θ').replace(r'\alpha', 'α').replace(r'\beta', 'β').replace(r'\gamma', 'γ').replace(r'\phi', 'ϕ')
 
     if rule_key == "Pythagoras":
@@ -159,7 +158,6 @@ def build_equations(problem_data):
             distractor1 = f"{t_disp} = √({hyp_val}² + {other_side}²)"
             distractor2 = f"{t_disp} = {hyp_val}² - {other_side}²"
     else:
-        # Trig rules
         base = rule_key.replace(" Inverse", "")
         fn = "sin" if base == "Sine" else ("cos" if base == "Cosine" else "tan")
         
@@ -172,13 +170,11 @@ def build_equations(problem_data):
             distractor2 = f"{t_disp} = {inv_fn}({den} / {num})"
         else:
             if labels['opp'] == target_var or labels['adj'] == target_var:
-                # finding side
                 known_side = hyp_val if base != "Tangent" else (adj_val if base == "Sine" else opp_val)
                 correct = f"{t_disp} = {known_side} × {fn}({angle_deg}°)"
                 distractor1 = f"{t_disp} = {known_side} / {fn}({angle_deg}°)"
                 distractor2 = f"{t_disp} = {fn}⁻¹({known_side} / {angle_deg})"
             else:
-                # finding hyp
                 known_side = opp_val if base == "Sine" else (adj_val if base == "Cosine" else opp_val)
                 correct = f"{t_disp} = {known_side} / {fn}({angle_deg}°)"
                 distractor1 = f"{t_disp} = {known_side} × {fn}({angle_deg}°)"
@@ -381,7 +377,7 @@ else:
     st.write(f"**Find the missing value (${target_var}$)!**")
 
     if st.session_state.interaction_mode == "Identification":
-        st.image(bg_image, use_column_width=True)
+        st.image(bg_image, use_container_width=True)
         st.write("Which mathematical rule/equation is required to solve this problem?")
         
         if st.session_state.id_style == "Function Names":
@@ -415,7 +411,6 @@ else:
                 if col.button(display_names[opt], use_container_width=True):
                     check_rule(opt)
         else:
-            # Equations Style
             correct_eq, dist1, dist2 = build_equations(st.session_state.trig_problem_data)
             
             if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
