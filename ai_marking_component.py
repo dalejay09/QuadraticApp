@@ -10,7 +10,8 @@ def render_grading_suite(
     bg_image, 
     height_px, 
     key_prefix="generic_marking", 
-    show_experimental_toolbar=False
+    show_experimental_toolbar=False,
+    solution_requirement="demonstrated"
 ):
     """
     Encapsulated logic for problem canvas, markup, Undo/Clear, Photo Snap, and AI Grading.
@@ -29,16 +30,12 @@ def render_grading_suite(
     INITIAL_DWG_KEY = k("initd")
     CAMERA_STATE_KEY = k("cam_s")
 
-    # Define the chronological grading sequence
-    # App logic must manage which color index is currently active.
     PEN_COLORS = ["#1E90FF", "#FF2400", "#32CD32", "#9400D3", "#FF8C00"]
     COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
 
-    # Parent App defines context header and manage the overhead color index.
     if 'current_marking_color_index' not in st.session_state:
         st.session_state.current_marking_color_index = 0
         
-    # Internal initialized check
     if k("init") not in st.session_state or st.session_state[k("init")] == False:
         st.session_state[FEEDBACK_KEY] = ""
         st.session_state[CANVAS_KEY] = 0
@@ -50,7 +47,6 @@ def render_grading_suite(
         st.session_state[CAMERA_STATE_KEY] = False
         st.session_state[k("init")] = True
 
-    # --- Tooling and Background problem display ---
     current_color_index = st.session_state.current_marking_color_index
     current_color_name = COLOR_NAMES[current_color_index]
     
@@ -63,10 +59,9 @@ def render_grading_suite(
         fill_color="rgba(255, 165, 0, 0.3)", stroke_width=active_stroke_width, stroke_color=active_stroke_color,
         background_image=bg_image, update_streamlit=True, height=height_px, width=350,
         drawing_mode="freedraw", return_image_data=True, initial_drawing=st.session_state[INITIAL_DWG_KEY], 
-        key=k(f"canvas_{st.session_state[CANVAS_KEY]}") # key per problem refresh
+        key=k(f"canvas_{st.session_state[CANVAS_KEY]}")
     )
 
-    # --- 2. EXPERIMENTAL Scribble Intercept Toolbar ---
     if show_experimental_toolbar:
         st.caption("🔬 *Scribble Toolbar (Tap an icon!)*")
         icons = ["🖌️", "🧽", "↩️", "🗑️", "📸"]
@@ -114,7 +109,6 @@ def render_grading_suite(
                 st.session_state[EXP_TOOLBAR_KEY] += 1
                 st.rerun()
 
-    # --- 3. The Native Toolbar ---
     st.write("---")
     t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
     with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key=TOOL_SELECTOR_KEY)
@@ -133,26 +127,29 @@ def render_grading_suite(
             st.session_state[CAMERA_STATE_KEY] = not st.session_state[CAMERA_STATE_KEY]
             st.rerun()
             
-    # Eraser Logic for current canvas (requires component keys)
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
     if len(current_objects) > len(st.session_state[STROKE_HIST_KEY][-1]):
         if current_objects[-1].get("stroke", "").upper() == "#FFFFFE":
             e = current_objects[-1]
             E_L, E_R, E_T, E_B = e.get("left",0)-15, e.get("left",0)+(e.get("width",0)*e.get("scaleX",1))+15, e.get("top",0)-15, e.get("top",0)+(e.get("height",0)*e.get("scaleY",1))+15
-            objects_to_keep = [obj for obj in st.session_state[STROKE_HIST_KEY][-1] if not (E_R < obj.get("left",0) or E_L > obj.get("left",0)+(obj.get("width",0)*obj.get("scaleX",1)) or E_B < obj.get("top",0) or E_T > obj.get("top",0)+(obj.get("height",0)*obj.get("scaleY",1)))]
+            objects_to_keep = [obj for obj in st.session_state[STROKE_HIST_KEY][-1] if not (E_R < obj.get("left",0) or E_L > obj.get("left",0)+(obj.get("width",0)*obj.get("scaleX",1)) or E_B < obj.get("top",0) or E_T > obj.get("top",0)+(obj.get("height",0)*obj.get("scaleX",1)))]
             st.session_state[STROKE_HIST_KEY].append(objects_to_keep)
             st.session_state[INITIAL_DWG_KEY], st.session_state[CANVAS_KEY] = {"version": "4.4.0", "objects": objects_to_keep}, st.session_state[CANVAS_KEY] + 1
             st.rerun()
         else:
             st.session_state[STROKE_HIST_KEY].append(current_objects.copy())
 
-    # --- Unified AI Processing ---
     camera_picture = None
     if st.session_state[CAMERA_STATE_KEY]:
         camera_picture = st.camera_input("Snap a photo:", key=k("cam_input")) if st.session_state.camera_mode == 'App' else st.file_uploader("Upload photo:", type=['png', 'jpg'], key=k("cam_input"))
 
-    # THE UNIVERSAL CHRONOLOGICAL GRADING PROMPT
     color_sequence_str = ", ".join(COLOR_NAMES)
+    
+    requirement_rule = (
+        "- REQUIREMENT (NUMERIC): The student MUST calculate and provide the final evaluated numeric answer on the canvas. If they only write the setup formula without calculating the final number, mark it INCORRECT."
+        if solution_requirement == "numeric"
+        else "- REQUIREMENT (DEMONSTRATED): Demonstrating the correct mathematical setup/method (e.g., algebraic formula or expression ready for calculator input) is sufficient. A final calculated numeric value is optional."
+    )
     
     marking_prompt = f"""
     You are an expert, encouraging math tutor grading a student's handwritten work.
@@ -162,9 +159,11 @@ def render_grading_suite(
     The full sequence of colors they cycle through is: {color_sequence_str}.
     They are currently writing in: {current_color_name}.
     
+    {requirement_rule}
+    
     CRITICAL VISUAL GRADING RULE:
-    - If the student solves the deduced background problem correctly using the chronology of their workings (work through the colors, looking for the final intended solution), reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
-    - If their solution or step-by-step working against the deduced background problem is incorrect, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief hint on what to do next. Do NOT give them the final answer.
+    - If the student solves the deduced background problem correctly using the chronology of their workings and fulfills the stated requirement above, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
+    - If their solution or step-by-step working against the deduced background problem is incorrect or misses the required format, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief hint on what to do next. Do NOT give them the final answer.
     """
 
     st.write("---")
@@ -200,7 +199,6 @@ def render_grading_suite(
                     st.rerun()
                 except Exception as e: st.error(f"Error: {e}")
 
-    # Render Feedback
     if st.session_state[FEEDBACK_KEY]:
         if st.session_state[CORRECT_STATE_KEY]:
             st.success(f"🌟 **Awesome job!** {st.session_state[FEEDBACK_KEY]}")

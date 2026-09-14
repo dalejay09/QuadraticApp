@@ -48,7 +48,6 @@ def generate_trig_problem(topic_setting):
     else:
         topic = topic_setting
 
-    # Base triangle generation (3,4,5 scaling to keep it visually nice)
     base_a, base_b = random.randint(4, 12), random.randint(4, 12)
     hyp_real = math.hypot(base_a, base_b)
     angle_rad = math.atan2(base_a, base_b)
@@ -129,7 +128,7 @@ def generate_trig_problem(topic_setting):
                     labels['opp'], labels['adj'], labels['angle'] = side_var, adj_val, f"{angle_deg}^\\circ"
                     ans, text_desc = opp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Opp {side_var}."
                 else:
-                    labels['opp'], labels['adj'], labels['angle'] = opp_val, side_var, f"{angle_deg}^\\circ"
+                    labels['opp'], labels['adj'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj {side_var}."
 
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var
@@ -166,13 +165,11 @@ def draw_triangle_image(problem_data, height_px):
     triangle = plt.Polygon([Cf, Af, Bf], fill=False, edgecolor='black', linewidth=2)
     ax.add_patch(triangle)
     
-    # Right Angle Square at C
     vCA = (Af - Cf) / np.linalg.norm(Af - Cf) * 0.05
     vCB = (Bf - Cf) / np.linalg.norm(Bf - Cf) * 0.05
     sq_pts = [Cf + vCA, Cf + vCA + vCB, Cf + vCB]
     ax.plot([Cf[0]+vCA[0], sq_pts[1][0], sq_pts[2][0]], [Cf[1]+vCA[1], sq_pts[1][1], sq_pts[2][1]], color='black', lw=1.5)
     
-    # True Circular Arc for Angle at A
     if labels['angle']:
         vAC = Cf - Af
         vAB = Bf - Af
@@ -251,6 +248,7 @@ def create_pdf_bytes(topic_setting):
 if 'generating' not in st.session_state: st.session_state.generating = True
 if 'trig_topic' not in st.session_state: st.session_state.trig_topic = "Both"
 if 'interaction_mode' not in st.session_state: st.session_state.interaction_mode = "Solve"
+if 'solution_req' not in st.session_state: st.session_state.solution_req = "demonstrated"
 if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
@@ -286,6 +284,7 @@ with col_set:
         st.write("**Settings**")
         st.radio("Problem Type", ["Pythagoras", "Trigonometry", "Both"], key="trig_topic", on_change=handle_settings_change)
         st.radio("Interaction Mode", ["Identification", "Solve"], key="interaction_mode", on_change=handle_settings_change)
+        st.radio("Solution Required", ["demonstrated", "numeric"], key="solution_req", on_change=handle_settings_change)
         st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
 
 # --- Master App Logic ---
@@ -304,7 +303,6 @@ else:
     st.write(f"**Find the missing value (${target_var}$)!**")
 
     if st.session_state.interaction_mode == "Identification":
-        # MODE 1: IDENTIFICATION (Random 3 choices including correct answer)
         st.image(bg_image, use_container_width=True)
         st.write("Which mathematical rule is required to solve this problem?")
         
@@ -342,11 +340,12 @@ else:
             else: st.warning(f"🤖 {st.session_state.id_feedback}")
             
     else:
-        # MODE 2: SOLVE
+        # MODE 2: SOLVE (Pass solution_requirement setting down to marker suite)
         ai_marking_component.render_grading_suite(
             bg_image=bg_image,
             height_px=450,
-            key_prefix=f"trig_suite_{st.session_state.problem_suite_refresh_id}"
+            key_prefix=f"trig_suite_{st.session_state.problem_suite_refresh_id}",
+            solution_requirement=st.session_state.get('solution_req', 'demonstrated')
         )
 
     st.write("---")
