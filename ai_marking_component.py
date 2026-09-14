@@ -36,8 +36,8 @@ def render_grading_suite(
     if 'current_marking_color_index' not in st.session_state:
         st.session_state.current_marking_color_index = 0
         
-    # Ensure initialization happens first before any state lookups
-    if k("init") not in st.session_state or st.session_state[k("init")] == False:
+    # Ensure safe initialization of all session state keys before any reads
+    if k("init") not in st.session_state or st.session_state.get(k("init")) == False:
         st.session_state[FEEDBACK_KEY] = ""
         st.session_state[CANVAS_KEY] = 0
         st.session_state[EXP_TOOLBAR_KEY] = 0
@@ -51,16 +51,18 @@ def render_grading_suite(
     current_color_index = st.session_state.current_marking_color_index
     current_color_name = COLOR_NAMES[current_color_index]
     
-    active_stroke_color = PEN_COLORS[current_color_index] if st.session_state[TOOL_SELECTOR_KEY] == "🖌️" else "#FFFFFE"
-    active_stroke_width = 3 if st.session_state[TOOL_SELECTOR_KEY] == "🖌️" else 15
+    # Use .get() to safely fall back if state is reset during a rerun
+    current_tool = st.session_state.get(TOOL_SELECTOR_KEY, "🖌️")
+    active_stroke_color = PEN_COLORS[current_color_index] if current_tool == "🖌️" else "#FFFFFE"
+    active_stroke_width = 3 if current_tool == "🖌️" else 15
 
     st.write(f"Current pen: **{current_color_name}**")
     
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", stroke_width=active_stroke_width, stroke_color=active_stroke_color,
         background_image=bg_image, update_streamlit=True, height=height_px, width=350,
-        drawing_mode="freedraw", return_image_data=True, initial_drawing=st.session_state[INITIAL_DWG_KEY], 
-        key=k(f"canvas_{st.session_state[CANVAS_KEY]}")
+        drawing_mode="freedraw", return_image_data=True, initial_drawing=st.session_state.get(INITIAL_DWG_KEY, {"version": "4.4.0", "objects": []}), 
+        key=k(f"canvas_{st.session_state.get(CANVAS_KEY, 0)}")
     )
 
     if show_experimental_toolbar:
@@ -78,7 +80,7 @@ def render_grading_suite(
         toolbar_result = st_canvas(
             fill_color="rgba(0,0,0,0)", stroke_width=2, stroke_color="#007AFF", background_color="#f3f4f6", update_streamlit=True,
             height=45, width=350, drawing_mode="freedraw", initial_drawing=toolbar_initial,
-            key=k(f"exp_toolbar_{st.session_state[EXP_TOOLBAR_KEY]}")
+            key=k(f"exp_toolbar_{st.session_state.get(EXP_TOOLBAR_KEY, 0)}")
         )
 
         if toolbar_result.json_data is not None:
@@ -97,17 +99,19 @@ def render_grading_suite(
                 if action:
                     st.toast(f"Toolbar Tapped: {action}")
                     if action in ["🖌️", "🧽"]: st.session_state[TOOL_SELECTOR_KEY] = action
-                    if action == "↩️" and len(st.session_state[STROKE_HIST_KEY]) > 1:
-                        st.session_state[STROKE_HIST_KEY].pop()
-                        st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": st.session_state[STROKE_HIST_KEY][-1]}
-                        st.session_state[CANVAS_KEY] += 1
+                    hist = st.session_state.get(STROKE_HIST_KEY, [[]])
+                    if action == "↩️" and len(hist) > 1:
+                        hist.pop()
+                        st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": hist[-1]}
+                        st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
                     if action == "🗑️":
-                        st.session_state[STROKE_HIST_KEY], st.session_state[INITIAL_DWG_KEY] = [[]], {"version": "4.4.0", "objects": []}
-                        st.session_state[CANVAS_KEY] += 1
+                        st.session_state[STROKE_HIST_KEY] = [[]]
+                        st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": []}
+                        st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
                     if action == "📸":
-                        st.session_state[CAMERA_STATE_KEY] = not st.session_state[CAMERA_STATE_KEY]
+                        st.session_state[CAMERA_STATE_KEY] = not st.session_state.get(CAMERA_STATE_KEY, False)
                 
-                st.session_state[EXP_TOOLBAR_KEY] += 1
+                st.session_state[EXP_TOOLBAR_KEY] = st.session_state.get(EXP_TOOLBAR_KEY, 0) + 1
                 st.rerun()
 
     st.write("---")
@@ -115,34 +119,42 @@ def render_grading_suite(
     with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key=TOOL_SELECTOR_KEY)
     with t_col2:
         if st.button("↩️", use_container_width=True, help="Undo", key=k("btn_undo")):
-            if len(st.session_state[STROKE_HIST_KEY]) > 1:
-                st.session_state[STROKE_HIST_KEY].pop()
-                st.session_state[INITIAL_DWG_KEY], st.session_state[CANVAS_KEY] = {"version": "4.4.0", "objects": st.session_state[STROKE_HIST_KEY][-1]}, st.session_state[CANVAS_KEY] + 1
+            hist = st.session_state.get(STROKE_HIST_KEY, [[]])
+            if len(hist) > 1:
+                hist.pop()
+                st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": hist[-1]}
+                st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
                 st.rerun()
     with t_col3:
         if st.button("🗑️", use_container_width=True, help="Clear Workings", key=k("btn_clear")):
-            st.session_state[STROKE_HIST_KEY], st.session_state[INITIAL_DWG_KEY], st.session_state[CANVAS_KEY] = [[]], {"version": "4.4.0", "objects": []}, st.session_state[CANVAS_KEY] + 1
+            st.session_state[STROKE_HIST_KEY] = [[]]
+            st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": []}
+            st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
             st.rerun()
     with t_col4:
         if st.button("📸 Paper", use_container_width=True, help="Snap photo of paper workings", key=k("btn_photo")):
-            st.session_state[CAMERA_STATE_KEY] = not st.session_state[CAMERA_STATE_KEY]
+            st.session_state[CAMERA_STATE_KEY] = not st.session_state.get(CAMERA_STATE_KEY, False)
             st.rerun()
             
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
-    if len(current_objects) > len(st.session_state[STROKE_HIST_KEY][-1]):
-        if current_objects[-1].get("stroke", "").upper() == "#FFFFFE":
-            e = current_objects[-1]
-            E_L, E_R, E_T, E_B = e.get("left",0)-15, e.get("left",0)+(e.get("width",0)*e.get("scaleX",1))+15, e.get("top",0)-15, e.get("top",0)+(e.get("height",0)*e.get("scaleY",1))+15
-            objects_to_keep = [obj for obj in st.session_state[STROKE_HIST_KEY][-1] if not (E_R < obj.get("left",0) or E_L > obj.get("left",0)+(obj.get("width",0)*obj.get("scaleX",1)) or E_B < obj.get("top",0) or E_T > obj.get("top",0)+(obj.get("height",0)*obj.get("scaleY",1)))]
-            st.session_state[STROKE_HIST_KEY].append(objects_to_keep)
-            st.session_state[INITIAL_DWG_KEY], st.session_state[CANVAS_KEY] = {"version": "4.4.0", "objects": objects_to_keep}, st.session_state[CANVAS_KEY] + 1
-            st.rerun()
-        else:
-            st.session_state[STROKE_HIST_KEY].append(current_objects.copy())
+    stroke_hist = st.session_state.get(STROKE_HIST_KEY, [[]])
+    if len(current_objects) > 0 and len(stroke_hist) > 0:
+        if len(current_objects) > len(stroke_hist[-1]):
+            if current_objects[-1].get("stroke", "").upper() == "#FFFFFE":
+                e = current_objects[-1]
+                E_L, E_R, E_T, E_B = e.get("left",0)-15, e.get("left",0)+(e.get("width",0)*e.get("scaleX",1))+15, e.get("top",0)-15, e.get("top",0)+(e.get("height",0)*e.get("scaleY",1))+15
+                objects_to_keep = [obj for obj in stroke_hist[-1] if not (E_R < obj.get("left",0) or E_L > obj.get("left",0)+(obj.get("width",0)*obj.get("scaleX",1)) or E_B < obj.get("top",0) or E_T > obj.get("top",0)+(obj.get("height",0)*obj.get("scaleX",1)))]
+                stroke_hist.append(objects_to_keep)
+                st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": objects_to_keep}
+                st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
+                st.rerun()
+            else:
+                stroke_hist.append(current_objects.copy())
 
     camera_picture = None
-    if st.session_state[CAMERA_STATE_KEY]:
-        camera_picture = st.camera_input("Snap a photo:", key=k("cam_input")) if st.session_state.camera_mode == 'App' else st.file_uploader("Upload photo:", type=['png', 'jpg'], key=k("cam_input"))
+    if st.session_state.get(CAMERA_STATE_KEY, False):
+        cam_input_mode = st.session_state.get('camera_mode', 'App')
+        camera_picture = st.camera_input("Snap a photo:", key=k("cam_input")) if cam_input_mode == 'App' else st.file_uploader("Upload photo:", type=['png', 'jpg'], key=k("cam_input"))
 
     color_sequence_str = ", ".join(COLOR_NAMES)
     
@@ -172,10 +184,10 @@ def render_grading_suite(
     """
 
     st.write("---")
-    if st.button("Check My Answer!", type="primary", use_container_width=True):
+    if st.button("Check My Answer!", type="primary", use_container_width=True, key=k("check_btn")):
         
         payload_images = []
-        if canvas_result.image_data is not None and len(st.session_state[STROKE_HIST_KEY][-1]) > 0:
+        if canvas_result.image_data is not None and len(stroke_hist[-1]) > 0:
             ink = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA').resize(bg_image.size, Image.Resampling.LANCZOS)
             payload_images.append(Image.alpha_composite(bg_image.convert("RGBA"), ink).convert("RGB"))
         if camera_picture: payload_images.append(Image.open(camera_picture).convert('RGB').resize((1024, 1024)))
@@ -204,8 +216,9 @@ def render_grading_suite(
                     st.rerun()
                 except Exception as e: st.error(f"Error: {e}")
 
-    if st.session_state[FEEDBACK_KEY]:
-        if st.session_state[CORRECT_STATE_KEY]:
-            st.success(f"🌟 **Awesome job!** {st.session_state[FEEDBACK_KEY]}")
+    feedback_msg = st.session_state.get(FEEDBACK_KEY, "")
+    if feedback_msg:
+        if st.session_state.get(CORRECT_STATE_KEY, False):
+            st.success(f"🌟 **Awesome job!** {feedback_msg}")
         else:
-            st.warning(f"🤖 **Tutor says:** {st.session_state[FEEDBACK_KEY]}")
+            st.warning(f"🤖 **Tutor says:** {feedback_msg}")
