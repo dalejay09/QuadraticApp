@@ -131,7 +131,7 @@ def render_grading_suite(
     if len(current_objects) > len(st.session_state[STROKE_HIST_KEY][-1]):
         if current_objects[-1].get("stroke", "").upper() == "#FFFFFE":
             e = current_objects[-1]
-            E_L, E_R, E_T, E_B = e.get("left",0)-15, e.get("left",0)+(e.get("width",0)*e.get("scaleX",1))+15, e.get("top",0)-15, e.get("top",0)+(e.get("height",0)*e.get("scaleY",1))+15
+            E_L, E_R, E_T, E_B = e.get("left",0)-15, e.get("left",0)+(e.get("width",0)*e.get("scaleX",1))+15, e.get("top",0)-15, e.get("top",0)+(e.get("height",0)*e.get("scaleX",1))+15
             objects_to_keep = [obj for obj in st.session_state[STROKE_HIST_KEY][-1] if not (E_R < obj.get("left",0) or E_L > obj.get("left",0)+(obj.get("width",0)*obj.get("scaleX",1)) or E_B < obj.get("top",0) or E_T > obj.get("top",0)+(obj.get("height",0)*obj.get("scaleX",1)))]
             st.session_state[STROKE_HIST_KEY].append(objects_to_keep)
             st.session_state[INITIAL_DWG_KEY], st.session_state[CANVAS_KEY] = {"version": "4.4.0", "objects": objects_to_keep}, st.session_state[CANVAS_KEY] + 1
@@ -145,11 +145,16 @@ def render_grading_suite(
 
     color_sequence_str = ", ".join(COLOR_NAMES)
     
-    requirement_rule = (
-        "- REQUIREMENT (NUMERIC): The student MUST calculate and provide the final evaluated numeric answer on the canvas. If they only write the setup formula without calculating the final number, mark it INCORRECT."
-        if solution_requirement == "numeric"
-        else "- REQUIREMENT (DEMONSTRATED): Demonstrating the correct mathematical setup/method (e.g., algebraic formula or expression ready for calculator input) is sufficient. A final calculated numeric value is optional."
-    )
+    # REFINED REQUIREMENT PROMPT
+    if solution_requirement == "numeric":
+        requirement_rule = (
+            "- REQUIREMENT (NUMERIC STRICT): The student MUST fully calculate out the final decimal number (e.g., evaluating square roots like sqrt(170) into a decimal like 13.04, or evaluating trigonometric fractions into a final number). "
+            "If they stop at an unevaluated expression, fraction, or radical like 'c = sqrt(170)' or 'x = 11 / sin(51)', you MUST mark it INCORRECT and instruct them to evaluate it to a decimal number."
+        )
+    else:
+        requirement_rule = (
+            "- REQUIREMENT (DEMONSTRATED): Demonstrating the correct mathematical setup/method (e.g., algebraic formula or expression ready for calculator input, such as leaving it as sqrt(170)) is sufficient. A final calculated numeric value is optional."
+        )
     
     marking_prompt = f"""
     You are an expert, encouraging math tutor grading a student's handwritten work.
