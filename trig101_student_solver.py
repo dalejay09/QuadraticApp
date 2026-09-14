@@ -139,6 +139,9 @@ def draw_triangle_image(problem_data, height_px):
     ax.set_ylim(0, 1)
     ax.axis('off')
     
+    # THE FIX: Force physical aspect ratio to be exactly 1:1 so angles don't stretch
+    ax.set_aspect('equal', adjustable='box')
+    
     # Base Triangle Vertices: C(right angle), A(angle theta), B
     C = np.array([0, 0])
     A = np.array([b, 0])
