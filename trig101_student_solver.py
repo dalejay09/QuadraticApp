@@ -345,14 +345,14 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
     return Image.open(buf).convert('RGBA').copy()
 
 # --- Visual Engine: WORD PROBLEM MATPLOTLIB CANVAS ---
-def draw_word_problem_image(text, size_px=380):
-    fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
+def draw_word_problem_image(text, width_px=380, height_px=760):
+    fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis('off')
     
-    # Top-align text to leave drawing space below for the student
+    # Top-align text to leave heavy drawing space below for the student
     wrapped_text = "\n".join(textwrap.wrap(text, width=42))
     ax.text(0.02, 0.98, wrapped_text, fontsize=12, ha='left', va='top', wrap=True, family='sans-serif', color='black')
     
@@ -491,7 +491,7 @@ if st.session_state.generating:
         else:
             wp_data = generate_word_problem(st.session_state.level)
             st.session_state.trig_problem_data = wp_data
-            st.session_state.problem_image_context = draw_word_problem_image(wp_data.get('problem_text', ''), size_px=380)
+            st.session_state.problem_image_context = draw_word_problem_image(wp_data.get('problem_text', ''), width_px=380, height_px=760)
             
         st.session_state.generating = False
         st.rerun()
@@ -560,9 +560,12 @@ else:
                 else: st.warning(f"🤖 {st.session_state.id_feedback}")
             
     else:
+        # Dynamically map the height of the canvas widget depending on the question type
+        canvas_height = 380 if st.session_state.question_type == "Graphical" else 760
+        
         ai_marking_component.render_grading_suite(
             bg_image=bg_image,
-            height_px=380,
+            height_px=canvas_height,
             key_prefix=f"trig_suite_{st.session_state.problem_suite_refresh_id}",
             solution_requirement=st.session_state.get('solution_req', 'demonstrated')
         )
