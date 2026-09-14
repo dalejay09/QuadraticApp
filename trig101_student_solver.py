@@ -134,10 +134,10 @@ def generate_trig_problem(topic_setting):
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var
 
 # --- Visual Engine: DYNAMIC MATPLOTLIB GEOMETRY ---
-def draw_triangle_image(problem_data, height_px):
+def draw_triangle_image(problem_data, height_px=220, width_px=220):
     labels, rule_key, ans, text_desc, (a, b), target_var = problem_data
     
-    fig, ax = plt.subplots(figsize=(3.5, height_px/100), dpi=100)
+    fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -162,13 +162,13 @@ def draw_triangle_image(problem_data, height_px):
     Af = (A_rot - center) * scale + [0.5, 0.5]
     Bf = (B_rot - center) * scale + [0.5, 0.5]
     
-    triangle = plt.Polygon([Cf, Af, Bf], fill=False, edgecolor='black', linewidth=2)
+    triangle = plt.Polygon([Cf, Af, Bf], fill=False, edgecolor='black', linewidth=1.5)
     ax.add_patch(triangle)
     
-    vCA = (Af - Cf) / np.linalg.norm(Af - Cf) * 0.05
-    vCB = (Bf - Cf) / np.linalg.norm(Bf - Cf) * 0.05
+    vCA = (Af - Cf) / np.linalg.norm(Af - Cf) * 0.04
+    vCB = (Bf - Cf) / np.linalg.norm(Bf - Cf) * 0.04
     sq_pts = [Cf + vCA, Cf + vCA + vCB, Cf + vCB]
-    ax.plot([Cf[0]+vCA[0], sq_pts[1][0], sq_pts[2][0]], [Cf[1]+vCA[1], sq_pts[1][1], sq_pts[2][1]], color='black', lw=1.5)
+    ax.plot([Cf[0]+vCA[0], sq_pts[1][0], sq_pts[2][0]], [Cf[1]+vCA[1], sq_pts[1][1], sq_pts[2][1]], color='black', lw=1)
     
     if labels['angle']:
         vAC = Cf - Af
@@ -179,12 +179,12 @@ def draw_triangle_image(problem_data, height_px):
         if max_ang - min_ang > 180:
             min_ang, max_ang = max_ang, min_ang + 360
             
-        arc = patches.Arc(Af, 0.15, 0.15, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1.5)
+        arc = patches.Arc(Af, 0.12, 0.12, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
         ax.add_patch(arc)
         
         mid_rad = np.radians((min_ang + max_ang) / 2)
-        txt_pos = Af + 0.11 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
-        ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=16, ha='center', va='center')
+        txt_pos = Af + 0.09 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
+        ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=12, ha='center', va='center')
 
     def place_label(p1, p2, text):
         if not text: return
@@ -193,20 +193,20 @@ def draw_triangle_image(problem_data, height_px):
         normal = np.array([-vec[1], vec[0]]) 
         normal = normal / np.linalg.norm(normal)
         if np.dot(normal, mid - np.array([0.5, 0.5])) < 0: normal = -normal
-        pos = mid + normal * 0.06
-        ax.text(pos[0], pos[1], f"${text}$", fontsize=16, ha='center', va='center')
+        pos = mid + normal * 0.05
+        ax.text(pos[0], pos[1], f"${text}$", fontsize=12, ha='center', va='center')
 
     place_label(Cf, Bf, labels['opp']) 
     place_label(Cf, Af, labels['adj']) 
     place_label(Af, Bf, labels['hyp']) 
 
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
+    fig.savefig(buf, format='png', dpi=150, facecolor='white', transparent=False)
     plt.close(fig)
     buf.seek(0)
     return Image.open(buf).convert('RGBA').copy()
 
-# --- Worksheet PDF Generator ---
+# --- Worksheet PDF Generator (5 rows of 4 images layout) ---
 def create_pdf_bytes(topic_setting):
     from google import genai
     buffer = io.BytesIO()
@@ -216,7 +216,7 @@ def create_pdf_bytes(topic_setting):
         try:
             client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
             payload = "".join([f"Q{i+1}: {p[3]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
-            prompt = f"Write the concise, human-readable step-by-step solution method for each right-angled triangle problem using SOH CAH TOA or Pythagoras. Plain text.\nData:\n{payload}"
+            prompt = f"Write very brief, space-saving step solutions using shorthand notation (e.g., opp., adj., hyp., pythag.). Plain text.\nData:\n{payload}"
             response = client.models.generate_content(
                 model='gemini-3.6-flash', contents=[prompt],
                 config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
@@ -226,20 +226,31 @@ def create_pdf_bytes(topic_setting):
         except Exception as e:
             pass
         
-        fig, axes = plt.subplots(figsize=(8.27, 11.69))
-        axes.axis('off')
-        axes.text(0.5, 0.95, f"Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
-        for i in range(10):
-            axes.text(0.05, 0.88 - (i*0.085), f"Q{i+1}: {problems[i][3]}", fontsize=11, va='top')
-            axes.text(0.55, 0.88 - (i*0.085), f"Q{i+11}: {problems[i+10][3]}", fontsize=11, va='top')
-        pdf.savefig(fig); plt.close(fig)
+        # Page 1: Worksheet Grid (5 rows x 4 cols of triangle images)
+        fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
+        fig_ws.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05, wspace=0.2, hspace=0.3)
+        fig_ws.suptitle("Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
+        
+        for idx, p_data in enumerate(problems):
+            row, col = divmod(idx, 4)
+            ax = axes[row, col]
+            ax.axis('off')
+            # Render triangle into subplot
+            img_buf = draw_triangle_image(p_data, height_px=180, width_px=180)
+            ax.imshow(img_buf)
+            ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=2)
+            
+        pdf.savefig(fig_ws); plt.close(fig_ws)
 
+        # Page 2: Answer Key with compact text wrapping
         fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
         ax_ans.axis('off')
         ax_ans.text(0.5, 0.95, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
         for i in range(10):
-            ax_ans.text(0.05, 0.88 - (i*0.085), f"Q{i+1}: {problems[i][2]}\n{ai_steps.get(i+1, '')}", fontsize=8, va='top', wrap=True)
-            ax_ans.text(0.55, 0.88 - (i*0.085), f"Q{i+11}: {problems[i+10][2]}\n{ai_steps.get(i+11, '')}", fontsize=8, va='top', wrap=True)
+            txt_l = f"Q{i+1}: Ans: {problems[i][2]} | {ai_steps.get(i+1, '')}"
+            txt_r = f"Q{i+11}: Ans: {problems[i+11][2]} | {ai_steps.get(i+11, '')}"
+            ax_ans.text(0.05, 0.88 - (i*0.08), txt_l, fontsize=8, va='top', wrap=True)
+            ax_ans.text(0.52, 0.88 - (i*0.08), txt_r, fontsize=8, va='top', wrap=True)
         pdf.savefig(fig_ans); plt.close(fig_ans)
 
     return buffer.getvalue()
@@ -271,7 +282,7 @@ with col_actions:
         st.markdown("**1. Create a physical worksheet**")
         if st.session_state.pdf_bytes is None:
             if st.button("⚙️ Generate Worksheet PDF", use_container_width=True):
-                with st.spinner("Compiling Master PDF..."):
+                with st.spinner("Compiling Master PDF Grid..."):
                     st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.trig_topic)
                 st.rerun()
         else:
@@ -308,7 +319,7 @@ else:
     st.write(f"**Find the missing value (${target_var}$)!**")
 
     if st.session_state.interaction_mode == "Identification":
-        st.image(bg_image, use_container_width=True)
+        st.image(bg_image, use_column_width=True)
         st.write("Which mathematical rule is required to solve this problem?")
         
         all_rules = ["Pythagoras", "Sine", "Cosine", "Tangent", "Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
