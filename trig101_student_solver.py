@@ -43,8 +43,8 @@ class AIWorksheetSolutions(BaseModel):
     solutions: list[SolutionRow]
 
 # --- Math Engine: TRIGONOMETRY ---
-def generate_trig_problem(topic_setting):
-    """Generates random side/angle combinations and returns the required labels & rule."""
+def generate_trig_problem(topic_setting, level="1"):
+    """Generates random side/angle combinations, and applies Level 2 geometry if requested."""
     if topic_setting == "Both":
         topic = random.choice(["Pythagoras", "Trigonometry"])
     else:
@@ -139,11 +139,35 @@ def generate_trig_problem(topic_setting):
                     labels['opp'], labels['adj'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj {side_var}."
 
-    return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg
+    # --- LEVEL 2 OBFUSCATION LOGIC ---
+    l2_type = None
+    l2_label = ""
+    
+    if level == "2" and topic != "Pythagoras":
+        if find_angle:
+            # If finding the angle, limit to direct equivalents so the target variable doesn't change meaning
+            l2_type = random.choice(['parallel_Z', 'vertical_opp'])
+            l2_label = f"{angle_var}"
+        else:
+            # If finding a side, we can safely obfuscate the numerical angle
+            l2_type = random.choice(['complement', 'supplementary', 'parallel_Z', 'vertical_opp'])
+            if l2_type == 'complement':
+                l2_label = f"{90 - angle_deg}^\\circ"
+            elif l2_type == 'supplementary':
+                l2_label = f"{180 - angle_deg}^\\circ"
+            elif l2_type == 'parallel_Z':
+                l2_label = f"{angle_deg}^\\circ"
+            elif l2_type == 'vertical_opp':
+                l2_label = f"{angle_deg}^\\circ"
+        
+        # Suppress the default internal angle label so only the external one draws
+        labels['angle'] = ""
+
+    return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg, l2_type, l2_label
 
 # --- Equation Generator with Randomized Distractors ---
 def build_equations(problem_data, topic_setting):
-    labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg = problem_data
+    labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg, l2_type, l2_label = problem_data
     hyp_val = round(hyp_real, 1) if hyp_real % 1 != 0 else int(hyp_real)
     
     t_disp = target_var.replace(r'\theta', 'θ').replace(r'\alpha', 'α').replace(r'\beta', 'β').replace(r'\gamma', 'γ').replace(r'\phi', 'ϕ')
@@ -196,59 +220,108 @@ def build_equations(problem_data, topic_setting):
 
     return correct, distractor1, distractor2
 
-# --- Visual Engine: UNIFORM SQUARE MATPLOTLIB GEOMETRY ---
+# --- Visual Engine: UNIVERSAL MATPLOTLIB GEOMETRY WITH LEVEL 2 SUPPORT ---
 def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
-    labels, rule_key, ans, text_desc, (a, b), target_var, sub_type, hyp_real, angle_deg = problem_data
+    labels, rule_key, ans, text_desc, (a, b), target_var, sub_type, hyp_real, angle_deg, l2_type, l2_label = problem_data
     
     fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis('off')
-    
     ax.set_aspect('equal', adjustable='box')
     
-    C = np.array([0, 0])
-    A = np.array([b, 0])
-    B = np.array([0, a])
+    # Define points in unrotated local space
+    C = np.array([0.0, 0.0])
+    A = np.array([b, 0.0])
+    B = np.array([0.0, a])
     
     theta = random.uniform(0, 2 * np.pi)
     R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-    C_rot, A_rot, B_rot = R.dot(C), R.dot(A), R.dot(B)
     
-    pts = np.vstack([C_rot, A_rot, B_rot])
+    def transform(pt):
+        return R.dot(pt)
+        
+    extra_lines = []
+    extra_arcs = []
+    
+    if labels['angle']:
+        extra_arcs.append((A, C, B, labels['angle']))
+        
+    pts_to_fit = [transform(C), transform(A), transform(B)]
+    
+    # Generate Level 2 auxiliary geometry
+    if l2_type == 'complement':
+        extra_arcs.append((B, C, A, l2_label))
+    elif l2_type == 'supplementary':
+        A_ext = A + (A - C) * 0.7
+        extra_lines.append((A, A_ext, '-'))
+        extra_arcs.append((A, B, A_ext, l2_label))
+        pts_to_fit.append(transform(A_ext))
+    elif l2_type == 'vertical_opp':
+        A_ext1 = A + (A - C) * 0.7
+        A_ext2 = A + (A - B) * 0.7
+        extra_lines.append((A, A_ext1, '-'))
+        extra_lines.append((A, A_ext2, '-'))
+        extra_arcs.append((A, A_ext1, A_ext2, l2_label))
+        pts_to_fit.append(transform(A_ext1))
+        pts_to_fit.append(transform(A_ext2))
+    elif l2_type == 'parallel_Z':
+        B_ext1 = B + (C - A) * 0.7
+        B_ext2 = B + (A - C) * 0.7
+        extra_lines.append((B_ext1, B_ext2, '--'))
+        extra_arcs.append((B, B_ext1, A, l2_label))
+        pts_to_fit.append(transform(B_ext1))
+        pts_to_fit.append(transform(B_ext2))
+        
+    pts = np.vstack(pts_to_fit)
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
     
     scale = 0.72 / max(max_pt - min_pt)
     
-    Cf = (C_rot - center) * scale + [0.5, 0.5]
-    Af = (A_rot - center) * scale + [0.5, 0.5]
-    Bf = (B_rot - center) * scale + [0.5, 0.5]
+    def final_pt(pt):
+        return (transform(pt) - center) * scale + [0.5, 0.5]
+        
+    Cf = final_pt(C)
+    Af = final_pt(A)
+    Bf = final_pt(B)
     
     triangle = plt.Polygon([Cf, Af, Bf], fill=False, edgecolor='black', linewidth=1.5)
     ax.add_patch(triangle)
     
-    vCA = (Af - Cf) / np.linalg.norm(Af - Cf) * 0.04
-    vCB = (Bf - Cf) / np.linalg.norm(Bf - Cf) * 0.04
-    sq_pts = [Cf + vCA, Cf + vCA + vCB, Cf + vCB]
-    ax.plot([Cf[0]+vCA[0], sq_pts[1][0], sq_pts[2][0]], [Cf[1]+vCA[1], sq_pts[1][1], sq_pts[2][1]], color='black', lw=1)
+    # Draw right angle square
+    vCA_f = (Af - Cf) / np.linalg.norm(Af - Cf) * 0.04
+    vCB_f = (Bf - Cf) / np.linalg.norm(Bf - Cf) * 0.04
+    sq_pts = [Cf + vCA_f, Cf + vCA_f + vCB_f, Cf + vCB_f]
+    ax.plot([Cf[0]+vCA_f[0], sq_pts[1][0], sq_pts[2][0]], [Cf[1]+vCA_f[1], sq_pts[1][1], sq_pts[2][1]], color='black', lw=1)
     
-    if labels['angle']:
-        vAC = Cf - Af
-        vAB = Bf - Af
-        ang1 = np.degrees(np.arctan2(vAC[1], vAC[0]))
-        ang2 = np.degrees(np.arctan2(vAB[1], vAB[0]))
+    # Draw auxiliary lines
+    for (p1, p2, style) in extra_lines:
+        p1f = final_pt(p1)
+        p2f = final_pt(p2)
+        ax.plot([p1f[0], p2f[0]], [p1f[1], p2f[1]], color='black', linestyle=style, lw=1.2)
+        
+    # Draw universal arcs
+    for (pt_c, pt_1, pt_2, label) in extra_arcs:
+        cf = final_pt(pt_c)
+        p1f = final_pt(pt_1)
+        p2f = final_pt(pt_2)
+        
+        v1 = p1f - cf
+        v2 = p2f - cf
+        ang1 = np.degrees(np.arctan2(v1[1], v1[0]))
+        ang2 = np.degrees(np.arctan2(v2[1], v2[0]))
         min_ang, max_ang = min(ang1, ang2), max(ang1, ang2)
         if max_ang - min_ang > 180:
             min_ang, max_ang = max_ang, min_ang + 360
             
-        arc = patches.Arc(Af, 0.28, 0.28, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
+        arc = patches.Arc(cf, 0.28, 0.28, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
         ax.add_patch(arc)
         
         mid_rad = np.radians((min_ang + max_ang) / 2)
-        txt_pos = Af + 0.21 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
-        ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=11, ha='center', va='center')
+        txt_pos = cf + 0.21 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
+        ax.text(txt_pos[0], txt_pos[1], f"${label}$", fontsize=11, ha='center', va='center')
 
     def place_label(p1, p2, text):
         if not text: return
@@ -278,12 +351,12 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     return Image.open(buf).convert('RGBA').copy()
 
 # --- Worksheet PDF Generator with Clean Inverse Trig & Real Newlines ---
-def create_pdf_bytes(topic_setting):
+def create_pdf_bytes(topic_setting, level):
     from google import genai
     buffer = io.BytesIO()
     try:
         with PdfPages(buffer) as pdf:
-            problems = [generate_trig_problem(topic_setting) for _ in range(20)]
+            problems = [generate_trig_problem(topic_setting, level) for _ in range(20)]
             ai_steps = {}
             try:
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -300,6 +373,7 @@ def create_pdf_bytes(topic_setting):
                     config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
                 )
                 for item in json.loads(response.text).get("solutions", []):
+                    # Replace JSON escaped string block '\n' with real python newlines \n for Matplotlib
                     cleaned_step = item["steps"].replace("**", "").replace(r"\n", "\n")
                     ai_steps[item["q_num"]] = cleaned_step
             except Exception as e:
@@ -350,6 +424,9 @@ if 'generating' not in st.session_state: st.session_state.generating = True
 if 'trig_topic' not in st.session_state:
     st.session_state.trig_topic = os.getenv("TRIG_TOPIC", st.secrets.get("TRIG_TOPIC", "Both"))
 
+if 'level' not in st.session_state:
+    st.session_state.level = os.getenv("LEVEL", st.secrets.get("LEVEL", "1"))
+
 if 'interaction_mode' not in st.session_state:
     st.session_state.interaction_mode = os.getenv("INTERACTION_MODE", st.secrets.get("INTERACTION_MODE", "Solve"))
 
@@ -385,7 +462,7 @@ with col_actions:
             if st.button("⚙️ Generate Worksheet PDF", use_container_width=True):
                 with st.spinner("Compiling Master PDF Grid..."):
                     try:
-                        st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.trig_topic)
+                        st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.trig_topic, st.session_state.level)
                     except Exception:
                         st.session_state.pdf_bytes = None
                 st.rerun()
@@ -403,6 +480,7 @@ with col_actions:
 with col_set:
     with st.popover("⚙️", use_container_width=True):
         st.write("**Settings**")
+        st.radio("Level", ["1", "2"], key="level", horizontal=True, on_change=handle_settings_change)
         st.radio("Problem Type", ["Pythagoras", "Trigonometry", "Both"], key="trig_topic", on_change=handle_settings_change)
         st.radio("Interaction Mode", ["Identification", "Solve"], key="interaction_mode", on_change=handle_settings_change)
         st.radio("Identification Style", ["Function Names", "Equations"], key="id_style", on_change=handle_settings_change)
@@ -412,14 +490,14 @@ with col_set:
 # --- Master App Logic ---
 if st.session_state.generating:
     with st.spinner("Drawing geometry..."):
-        p_data = generate_trig_problem(st.session_state.trig_topic)
+        p_data = generate_trig_problem(st.session_state.trig_topic, st.session_state.level)
         st.session_state.trig_problem_data = p_data
         st.session_state.problem_image_context = draw_triangle_image(p_data, size_px=380, label_padding=0.08)
         st.session_state.generating = False
         st.rerun()
 
 else:
-    labels, rule_key, ans, text_desc, sides, target_var, sub_type, hyp_real, angle_deg = st.session_state.trig_problem_data
+    labels, rule_key, ans, text_desc, sides, target_var, sub_type, hyp_real, angle_deg, l2_type, l2_label = st.session_state.trig_problem_data
     bg_image = st.session_state.problem_image_context
 
     st.write(f"**Find the missing value (${target_var}$)!**")
