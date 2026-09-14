@@ -66,18 +66,22 @@ def generate_trig_problem(topic_setting):
     text_desc = ""
     target_var = ""
     rule_key = ""
+    sub_type = ""
 
     if topic == "Pythagoras":
         rule_key = "Pythagoras"
         target = random.choice(['hyp', 'leg1', 'leg2'])
         target_var = side_var
         if target == 'hyp':
+            sub_type = "hyp"
             labels['opp'], labels['adj'], labels['hyp'] = opp_val, adj_val, side_var
             ans, text_desc = hyp_val, f"Legs {opp_val}, {adj_val}. Find hyp {side_var}."
         elif target == 'leg1':
+            sub_type = "leg"
             labels['opp'], labels['adj'], labels['hyp'] = side_var, adj_val, hyp_val
             ans, text_desc = opp_val, f"Hyp {hyp_val}, Leg {adj_val}. Find leg {side_var}."
         else:
+            sub_type = "leg"
             labels['opp'], labels['adj'], labels['hyp'] = opp_val, side_var, hyp_val
             ans, text_desc = adj_val, f"Hyp {hyp_val}, Leg {opp_val}. Find leg {side_var}."
     
@@ -87,8 +91,10 @@ def generate_trig_problem(topic_setting):
         
         if find_angle:
             rule_key = f"{base_rule} Inverse"
+            sub_type = "angle"
         else:
             rule_key = base_rule
+            sub_type = random.choice(["side_opp", "side_hyp"])
             
         if base_rule == "Sine":
             if find_angle:
@@ -132,13 +138,58 @@ def generate_trig_problem(topic_setting):
                     labels['opp'], labels['adj'], labels['angle'] = opp_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj {side_var}."
 
-    return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var
+    return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg
+
+# --- Equation Generator for Identification ---
+def build_equations(problem_data):
+    labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var, sub_type, hyp_real, angle_deg = problem_data
+    hyp_val = round(hyp_real, 1) if hyp_real % 1 != 0 else int(hyp_real)
+    
+    # Clean display string for target variable
+    t_disp = target_var.replace(r'\theta', 'θ').replace(r'\alpha', 'α').replace(r'\beta', 'β').replace(r'\gamma', 'γ').replace(r'\phi', 'ϕ')
+
+    if rule_key == "Pythagoras":
+        if sub_type == "hyp":
+            correct = f"{t_disp} = √({opp_val}² + {adj_val}²)"
+            distractor1 = f"{t_disp} = √({opp_val}² - {adj_val}²)"
+            distractor2 = f"{t_disp} = {opp_val}² + {adj_val}²"
+        else:
+            other_side = adj_val if labels['opp'] == target_var else opp_val
+            correct = f"{t_disp} = √({hyp_val}² - {other_side}²)"
+            distractor1 = f"{t_disp} = √({hyp_val}² + {other_side}²)"
+            distractor2 = f"{t_disp} = {hyp_val}² - {other_side}²"
+    else:
+        # Trig rules
+        base = rule_key.replace(" Inverse", "")
+        fn = "sin" if base == "Sine" else ("cos" if base == "Cosine" else "tan")
+        
+        if "Inverse" in rule_key:
+            num = opp_val if base == "Sine" else (adj_val if base == "Cosine" else opp_val)
+            den = hyp_val if base != "Tangent" else adj_val
+            inv_fn = "sin⁻¹" if fn == "sin" else ("cos⁻¹" if fn == "cos" else "tan⁻¹")
+            correct = f"{t_disp} = {inv_fn}({num} / {den})"
+            distractor1 = f"{t_disp} = {fn}({num} / {den})"
+            distractor2 = f"{t_disp} = {inv_fn}({den} / {num})"
+        else:
+            if labels['opp'] == target_var or labels['adj'] == target_var:
+                # finding side
+                known_side = hyp_val if base != "Tangent" else (adj_val if base == "Sine" else opp_val)
+                correct = f"{t_disp} = {known_side} × {fn}({angle_deg}°)"
+                distractor1 = f"{t_disp} = {known_side} / {fn}({angle_deg}°)"
+                distractor2 = f"{t_disp} = {fn}⁻¹({known_side} / {angle_deg})"
+            else:
+                # finding hyp
+                known_side = opp_val if base == "Sine" else (adj_val if base == "Cosine" else opp_val)
+                correct = f"{t_disp} = {known_side} / {fn}({angle_deg}°)"
+                distractor1 = f"{t_disp} = {known_side} × {fn}({angle_deg}°)"
+                distractor2 = f"{t_disp} = {fn}({known_side} / {angle_deg}°)"
+
+    return correct, distractor1, distractor2
 
 # --- Visual Engine: UNIFORM SQUARE MATPLOTLIB GEOMETRY ---
 def draw_triangle_image(problem_data, size_px=350):
-    labels, rule_key, ans, text_desc, (a, b), target_var = problem_data
+    labels, rule_key, ans, text_desc, (a, b), target_var, sub_type, hyp_real, angle_deg = problem_data
     
-    # Strictly square dimensions to prevent right-angle skewing
     fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
     ax.set_xlim(0, 1)
@@ -197,13 +248,13 @@ def draw_triangle_image(problem_data, size_px=350):
         if np.dot(normal, mid - np.array([0.5, 0.5])) < 0: normal = -normal
         pos = mid + normal * 0.06
         
-        angle_deg = np.degrees(np.arctan2(vec[1], vec[0]))
-        if angle_deg > 90:
-            angle_deg -= 180
-        elif angle_deg < -90:
-            angle_deg += 180
+        angle_deg_val = np.degrees(np.arctan2(vec[1], vec[0]))
+        if angle_deg_val > 90:
+            angle_deg_val -= 180
+        elif angle_deg_val < -90:
+            angle_deg_val += 180
 
-        ax.text(pos[0], pos[1], f"${text}$", fontsize=12, ha='center', va='center', rotation=angle_deg, rotation_mode='anchor')
+        ax.text(pos[0], pos[1], f"${text}$", fontsize=12, ha='center', va='center', rotation=angle_deg_val, rotation_mode='anchor')
 
     place_label(Cf, Bf, labels['opp']) 
     place_label(Cf, Af, labels['adj']) 
@@ -215,7 +266,7 @@ def draw_triangle_image(problem_data, size_px=350):
     buf.seek(0)
     return Image.open(buf).convert('RGBA').copy()
 
-# --- Worksheet PDF Generator (5 rows of 4 images layout) ---
+# --- Worksheet PDF Generator ---
 def create_pdf_bytes(topic_setting):
     from google import genai
     buffer = io.BytesIO()
@@ -268,6 +319,7 @@ if 'generating' not in st.session_state: st.session_state.generating = True
 if 'trig_topic' not in st.session_state: st.session_state.trig_topic = "Both"
 if 'interaction_mode' not in st.session_state: st.session_state.interaction_mode = "Solve"
 if 'solution_req' not in st.session_state: st.session_state.solution_req = "demonstrated"
+if 'id_style' not in st.session_state: st.session_state.id_style = "Function Names"
 if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
@@ -309,6 +361,7 @@ with col_set:
         st.write("**Settings**")
         st.radio("Problem Type", ["Pythagoras", "Trigonometry", "Both"], key="trig_topic", on_change=handle_settings_change)
         st.radio("Interaction Mode", ["Identification", "Solve"], key="interaction_mode", on_change=handle_settings_change)
+        st.radio("Identification Style", ["Function Names", "Equations"], key="id_style", on_change=handle_settings_change)
         st.radio("Solution Required", ["demonstrated", "numeric"], key="solution_req", on_change=handle_settings_change)
         st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
 
@@ -322,43 +375,64 @@ if st.session_state.generating:
         st.rerun()
 
 else:
-    labels, rule_key, ans, text_desc, sides, target_var = st.session_state.trig_problem_data
+    labels, rule_key, ans, text_desc, sides, target_var, sub_type, hyp_real, angle_deg = st.session_state.trig_problem_data
     bg_image = st.session_state.problem_image_context
 
     st.write(f"**Find the missing value (${target_var}$)!**")
 
     if st.session_state.interaction_mode == "Identification":
         st.image(bg_image, use_column_width=True)
-        st.write("Which mathematical rule is required to solve this problem?")
+        st.write("Which mathematical rule/equation is required to solve this problem?")
         
-        all_rules = ["Pythagoras", "Sine", "Cosine", "Tangent", "Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
-        display_names = {
-            "Pythagoras": "Pythagoras",
-            "Sine": "sin",
-            "Cosine": "cos",
-            "Tangent": "tan",
-            "Sine Inverse": "sin⁻¹",
-            "Cosine Inverse": "cos⁻¹",
-            "Tangent Inverse": "tan⁻¹"
-        }
-        
-        if 'id_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
-            incorrect_pool = [r for r in all_rules if r != rule_key]
-            chosen_incorrect = random.sample(incorrect_pool, 2)
-            options = chosen_incorrect + [rule_key]
-            random.shuffle(options)
-            st.session_state.id_options = options
-            st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
-
-        c1, c2, c3 = st.columns(3)
-        def check_rule(guess):
-            if guess == rule_key: st.session_state.id_feedback = f"Correct! Use **{display_names[rule_key]}**."
-            else: st.session_state.id_feedback = f"Not quite. Try again!"
+        if st.session_state.id_style == "Function Names":
+            all_rules = ["Pythagoras", "Sine", "Cosine", "Tangent", "Sine Inverse", "Cosine Inverse", "Tangent Inverse"]
+            display_names = {
+                "Pythagoras": "Pythagoras",
+                "Sine": "sin",
+                "Cosine": "cos",
+                "Tangent": "tan",
+                "Sine Inverse": "sin⁻¹",
+                "Cosine Inverse": "cos⁻¹",
+                "Tangent Inverse": "tan⁻¹"
+            }
+            correct_key = rule_key
             
-        for idx, opt in enumerate(st.session_state.id_options):
-            col = [c1, c2, c3][idx]
-            if col.button(display_names[opt], use_container_width=True):
-                check_rule(opt)
+            if 'id_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
+                incorrect_pool = [r for r in all_rules if r != correct_key]
+                chosen_incorrect = random.sample(incorrect_pool, 2)
+                options = chosen_incorrect + [correct_key]
+                random.shuffle(options)
+                st.session_state.id_options = options
+                st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
+
+            c1, c2, c3 = st.columns(3)
+            def check_rule(guess):
+                if guess == correct_key: st.session_state.id_feedback = f"Correct! Use **{display_names[correct_key]}**."
+                else: st.session_state.id_feedback = f"Not quite. Try again!"
+                
+            for idx, opt in enumerate(st.session_state.id_options):
+                col = [c1, c2, c3][idx]
+                if col.button(display_names[opt], use_container_width=True):
+                    check_rule(opt)
+        else:
+            # Equations Style
+            correct_eq, dist1, dist2 = build_equations(st.session_state.trig_problem_data)
+            
+            if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
+                options = [correct_eq, dist1, dist2]
+                random.shuffle(options)
+                st.session_state.id_eq_options = options
+                st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
+
+            c1, c2, c3 = st.columns(3)
+            def check_eq(guess):
+                if guess == correct_eq: st.session_state.id_feedback = f"Correct! This equation sets up the problem properly."
+                else: st.session_state.id_feedback = f"Not quite. Try again!"
+
+            for idx, opt in enumerate(st.session_state.id_eq_options):
+                col = [c1, c2, c3][idx]
+                if col.button(opt, use_container_width=True):
+                    check_eq(opt)
         
         if st.session_state.id_feedback:
             if "Correct" in st.session_state.id_feedback: st.success(f"🌟 {st.session_state.id_feedback}")
