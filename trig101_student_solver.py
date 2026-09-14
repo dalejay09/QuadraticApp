@@ -418,20 +418,17 @@ else:
             }
             correct_key = rule_key
             
-            if 'id_options' not in st.session_state or st.session_state.get('last_refresh_id'] != st.session_state.problem_suite_refresh_id:
-                # Randomize distribution: 50% chance of 1 correct / 2 incorrect, 50% chance of 2 correct-variants / 1 incorrect
+            if 'id_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
                 other_rules = [r for r in all_possible_rules if r != correct_key]
                 if random.random() < 0.5 and len(other_rules) >= 2:
-                    # 1 correct, 2 completely random distractors from different rules
                     chosen_incorrect = random.sample(other_rules, 2)
                     options = chosen_incorrect + [correct_key]
                 else:
-                    # Mix from family or general pool
                     chosen_incorrect = random.sample(other_rules, 1)
                     options = chosen_incorrect + [correct_key, correct_key] if random.random() < 0.5 else chosen_incorrect + [correct_key, random.choice(other_rules)]
                 
                 random.shuffle(options)
-                st.session_state.id_options = options[:3] # Ensure strictly 3 buttons
+                st.session_state.id_options = options[:3]
                 st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
 
             c1, c2, c3 = st.columns(3)
@@ -447,7 +444,6 @@ else:
             correct_eq, dist1, dist2 = build_equations(st.session_state.trig_problem_data, st.session_state.trig_topic)
             
             if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
-                # Randomize distribution for equations as well
                 eq_pool = [correct_eq, dist1, dist2]
                 if random.random() < 0.5:
                     options = [correct_eq, dist1, dist2]
