@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 from PIL import Image
+from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 import streamlit.components.v1 as components
 from pydantic import BaseModel, Field
@@ -128,7 +129,7 @@ def generate_trig_problem(topic_setting):
                     labels['opp'], labels['adj'], labels['angle'] = side_var, adj_val, f"{angle_deg}^\\circ"
                     ans, text_desc = opp_val, f"Angle {angle_deg}, Adj {adj_val}. Find Opp {side_var}."
                 else:
-                    labels['opp'], labels['adj'], labels['angle'] = adj_val, side_var, f"{angle_deg}^\\circ"
+                    labels['opp'], labels['adj'], labels['angle'] = opp_val, side_var, f"{angle_deg}^\\circ"
                     ans, text_desc = adj_val, f"Angle {angle_deg}, Opp {opp_val}. Find Adj {side_var}."
 
     return labels, rule_key, ans, text_desc, (opp_val, adj_val), target_var
@@ -235,20 +236,21 @@ def create_pdf_bytes(topic_setting):
             row, col = divmod(idx, 4)
             ax = axes[row, col]
             ax.axis('off')
-            # Render triangle into subplot
             img_buf = draw_triangle_image(p_data, height_px=180, width_px=180)
             ax.imshow(img_buf)
             ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=2)
             
         pdf.savefig(fig_ws); plt.close(fig_ws)
 
-        # Page 2: Answer Key with compact text wrapping
+        # Page 2: Answer Key with compact text wrapping (Fixed index lookup error)
         fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
         ax_ans.axis('off')
         ax_ans.text(0.5, 0.95, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
         for i in range(10):
-            txt_l = f"Q{i+1}: Ans: {problems[i][2]} | {ai_steps.get(i+1, '')}"
-            txt_r = f"Q{i+11}: Ans: {problems[i+11][2]} | {ai_steps.get(i+11, '')}"
+            left_idx = i
+            right_idx = i + 10
+            txt_l = f"Q{left_idx+1}: Ans: {problems[left_idx][2]} | {ai_steps.get(left_idx+1, '')}"
+            txt_r = f"Q{right_idx+1}: Ans: {problems[right_idx][2]} | {ai_steps.get(right_idx+1, '')}"
             ax_ans.text(0.05, 0.88 - (i*0.08), txt_l, fontsize=8, va='top', wrap=True)
             ax_ans.text(0.52, 0.88 - (i*0.08), txt_r, fontsize=8, va='top', wrap=True)
         pdf.savefig(fig_ans); plt.close(fig_ans)
@@ -286,7 +288,8 @@ with col_actions:
                     st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.trig_topic)
                 st.rerun()
         else:
-            st.download_button("⬇️ Download Worksheet", data=st.session_state.pdf_bytes, file_name="Trigonometry_101.pdf", mime="application/pdf", use_container_width=True, type="primary")
+            timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
+            st.download_button("⬇️ Download Worksheet", data=st.session_state.pdf_bytes, file_name=f"Trigonometry_101_{timestamp_str}.pdf", mime="application/pdf", use_container_width=True, type="primary")
             if st.button("🗑️ Clear / Reset PDF", use_container_width=True):
                 st.session_state.pdf_bytes = None
                 st.rerun()
@@ -343,7 +346,7 @@ else:
 
         c1, c2, c3 = st.columns(3)
         def check_rule(guess):
-            if guess == rule_key: st.session_state.id_feedback = f"Correct! We use **{display_names[rule_key]}** here."
+            if guess == rule_key: st.session_state.id_feedback = f"Correct! Use **{display_names[rule_key]}**."
             else: st.session_state.id_feedback = f"Not quite. Try again!"
             
         for idx, opt in enumerate(st.session_state.id_options):
