@@ -197,7 +197,7 @@ def build_equations(problem_data, topic_setting):
     return correct, distractor1, distractor2
 
 # --- Visual Engine: UNIFORM SQUARE MATPLOTLIB GEOMETRY ---
-def draw_triangle_image(problem_data, size_px=350):
+def draw_triangle_image(problem_data, size_px=350, label_padding=0.07):
     labels, rule_key, ans, text_desc, (a, b), target_var, sub_type, hyp_real, angle_deg = problem_data
     
     fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
@@ -219,7 +219,7 @@ def draw_triangle_image(problem_data, size_px=350):
     pts = np.vstack([C_rot, A_rot, B_rot])
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
-    scale = 0.55 / max(max_pt - min_pt)
+    scale = 0.52 / max(max_pt - min_pt)
     
     Cf = (C_rot - center) * scale + [0.5, 0.5]
     Af = (A_rot - center) * scale + [0.5, 0.5]
@@ -247,7 +247,7 @@ def draw_triangle_image(problem_data, size_px=350):
         
         mid_rad = np.radians((min_ang + max_ang) / 2)
         txt_pos = Af + 0.09 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
-        ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=12, ha='center', va='center')
+        ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=11, ha='center', va='center')
 
     def place_label(p1, p2, text):
         if not text: return
@@ -256,7 +256,7 @@ def draw_triangle_image(problem_data, size_px=350):
         normal = np.array([-vec[1], vec[0]]) 
         normal = normal / np.linalg.norm(normal)
         if np.dot(normal, mid - np.array([0.5, 0.5])) < 0: normal = -normal
-        pos = mid + normal * 0.06
+        pos = mid + normal * label_padding
         
         angle_deg_val = np.degrees(np.arctan2(vec[1], vec[0]))
         if angle_deg_val > 90:
@@ -264,7 +264,7 @@ def draw_triangle_image(problem_data, size_px=350):
         elif angle_deg_val < -90:
             angle_deg_val += 180
 
-        ax.text(pos[0], pos[1], f"${text}$", fontsize=12, ha='center', va='center', rotation=angle_deg_val, rotation_mode='anchor')
+        ax.text(pos[0], pos[1], f"${text}$", fontsize=11, ha='center', va='center', rotation=angle_deg_val, rotation_mode='anchor')
 
     place_label(Cf, Bf, labels['opp']) 
     place_label(Cf, Af, labels['adj']) 
@@ -286,40 +286,49 @@ def create_pdf_bytes(topic_setting):
         try:
             client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
             payload = "".join([f"Q{i+1}: {p[3]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
-            prompt = f"Write very brief, space-saving step solutions using shorthand notation (e.g., opp., adj., hyp., pythag.). Plain text.\nData:\n{payload}"
+            prompt = f"Write very brief, space-saving step solutions using shorthand notation with newline breaks where helpful (e.g., opp./adj. setup\nthen evaluate). Plain text.\nData:\n{payload}"
             response = client.models.generate_content(
                 model='gemini-3.6-flash', contents=[prompt],
                 config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
             )
             for item in json.loads(response.text).get("solutions", []):
-                ai_steps[item["q_num"]] = item["steps"].replace("**", "")
+                cleaned_step = item["steps"].replace("**", "").replace("; ", "\n")
+                ai_steps[item["q_num"]] = cleaned_step
         except Exception as e:
             pass
         
+        # Page 1: Worksheet Grid (5 rows x 4 cols with increased label padding)
         fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
-        fig_ws.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05, wspace=0.2, hspace=0.3)
+        fig_ws.subplots_adjust(left=0.04, right=0.96, top=0.92, bottom=0.04, wspace=0.15, hspace=0.25)
         fig_ws.suptitle("Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
         
         for idx, p_data in enumerate(problems):
             row, col = divmod(idx, 4)
             ax = axes[row, col]
             ax.axis('off')
-            img_buf = draw_triangle_image(p_data, size_px=180)
+            # Increased padding for PDF rendering to keep labels clear of lines
+            img_buf = draw_triangle_image(p_data, size_px=190, label_padding=0.09)
             ax.imshow(img_buf)
-            ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=2)
+            ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=1)
             
         pdf.savefig(fig_ws); plt.close(fig_ws)
 
+        # Page 2: Answer Key with structured newlines to prevent column overlaps
         fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
         ax_ans.axis('off')
-        ax_ans.text(0.5, 0.95, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
+        ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
         for i in range(10):
             left_idx = i
             right_idx = i + 10
-            txt_l = f"Q{left_idx+1}: Ans: {problems[left_idx][2]} | {ai_steps.get(left_idx+1, '')}"
-            txt_r = f"Q{right_idx+1}: Ans: {problems[right_idx][2]} | {ai_steps.get(right_idx+1, '')}"
-            ax_ans.text(0.05, 0.88 - (i*0.08), txt_l, fontsize=8, va='top', wrap=True)
-            ax_ans.text(0.52, 0.88 - (i*0.08), txt_r, fontsize=8, va='top', wrap=True)
+            step_l = ai_steps.get(left_idx+1, '').replace(". ", ".\n")
+            step_r = ai_steps.get(right_idx+1, '').replace(". ", ".\n")
+            
+            txt_l = f"Q{left_idx+1}: Ans: {problems[left_idx][2]}\n{step_l}"
+            txt_r = f"Q{right_idx+1}: Ans: {problems[right_idx][2]}\n{step_r}"
+            
+            y_pos = 0.90 - (i * 0.088)
+            ax_ans.text(0.04, y_pos, txt_l, fontsize=7.5, va='top', wrap=True, family='monospace')
+            ax_ans.text(0.52, y_pos, txt_r, fontsize=7.5, va='top', wrap=True, family='monospace')
         pdf.savefig(fig_ans); plt.close(fig_ans)
 
     return buffer.getvalue()
@@ -391,7 +400,7 @@ if st.session_state.generating:
     with st.spinner("Drawing geometry..."):
         p_data = generate_trig_problem(st.session_state.trig_topic)
         st.session_state.trig_problem_data = p_data
-        st.session_state.problem_image_context = draw_triangle_image(p_data, size_px=350)
+        st.session_state.problem_image_context = draw_triangle_image(p_data, size_px=350, label_padding=0.06)
         st.session_state.generating = False
         st.rerun()
 
