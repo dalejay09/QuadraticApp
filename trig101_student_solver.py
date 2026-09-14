@@ -37,7 +37,7 @@ st.markdown("""
 # --- AI Output Schemas for Worksheets ---
 class SolutionRow(BaseModel):
     q_num: int = Field(description="The question number (1 to 20)")
-    steps: str = Field(description="Step-by-step solving method")
+    steps: str = Field(description="Step-by-step solving method formatted in clean LaTeX syntax")
 
 class AIWorksheetSolutions(BaseModel):
     solutions: list[SolutionRow]
@@ -197,7 +197,7 @@ def build_equations(problem_data, topic_setting):
     return correct, distractor1, distractor2
 
 # --- Visual Engine: UNIFORM SQUARE MATPLOTLIB GEOMETRY ---
-def draw_triangle_image(problem_data, size_px=350, label_padding=0.07):
+def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     labels, rule_key, ans, text_desc, (a, b), target_var, sub_type, hyp_real, angle_deg = problem_data
     
     fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
@@ -219,7 +219,7 @@ def draw_triangle_image(problem_data, size_px=350, label_padding=0.07):
     pts = np.vstack([C_rot, A_rot, B_rot])
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
-    scale = 0.52 / max(max_pt - min_pt)
+    scale = 0.50 / max(max_pt - min_pt)
     
     Cf = (C_rot - center) * scale + [0.5, 0.5]
     Af = (A_rot - center) * scale + [0.5, 0.5]
@@ -242,11 +242,11 @@ def draw_triangle_image(problem_data, size_px=350, label_padding=0.07):
         if max_ang - min_ang > 180:
             min_ang, max_ang = max_ang, min_ang + 360
             
-        arc = patches.Arc(Af, 0.12, 0.12, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
+        arc = patches.Arc(Af, 0.16, 0.16, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
         ax.add_patch(arc)
         
         mid_rad = np.radians((min_ang + max_ang) / 2)
-        txt_pos = Af + 0.09 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
+        txt_pos = Af + 0.12 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
         ax.text(txt_pos[0], txt_pos[1], f"${labels['angle']}$", fontsize=11, ha='center', va='center')
 
     def place_label(p1, p2, text):
@@ -286,49 +286,52 @@ def create_pdf_bytes(topic_setting):
         try:
             client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
             payload = "".join([f"Q{i+1}: {p[3]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
-            prompt = f"Write very brief, space-saving step solutions using shorthand notation with newline breaks where helpful (e.g., opp./adj. setup\nthen evaluate). Plain text.\nData:\n{payload}"
+            prompt = (
+                "Write concise step-by-step solutions using LaTeX mathematical formatting inside dollar signs "
+                "(e.g., $\\cos(58^\\circ) = z / 9.4 \\rightarrow z = 9.4 \\times \\cos(58^\\circ) \\rightarrow z \\approx 5$). "
+                "Use newline characters where necessary to keep lines short. Plain text with LaTeX tags.\nData:\n" + payload
+            )
             response = client.models.generate_content(
                 model='gemini-3.6-flash', contents=[prompt],
                 config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
             )
             for item in json.loads(response.text).get("solutions", []):
-                cleaned_step = item["steps"].replace("**", "").replace("; ", "\n")
+                cleaned_step = item["steps"].replace("**", "").replace("->", r"\rightarrow")
                 ai_steps[item["q_num"]] = cleaned_step
         except Exception as e:
             pass
         
-        # Page 1: Worksheet Grid (5 rows x 4 cols with increased label padding)
+        # Page 1: Worksheet Grid (5 rows x 4 cols with increased scaling & padding)
         fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
-        fig_ws.subplots_adjust(left=0.04, right=0.96, top=0.92, bottom=0.04, wspace=0.15, hspace=0.25)
+        fig_ws.subplots_adjust(left=0.03, right=0.97, top=0.92, bottom=0.03, wspace=0.10, hspace=0.20)
         fig_ws.suptitle("Trigonometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
         
         for idx, p_data in enumerate(problems):
             row, col = divmod(idx, 4)
             ax = axes[row, col]
             ax.axis('off')
-            # Increased padding for PDF rendering to keep labels clear of lines
-            img_buf = draw_triangle_image(p_data, size_px=190, label_padding=0.09)
+            img_buf = draw_triangle_image(p_data, size_px=210, label_padding=0.10)
             ax.imshow(img_buf)
             ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=1)
             
         pdf.savefig(fig_ws); plt.close(fig_ws)
 
-        # Page 2: Answer Key with structured newlines to prevent column overlaps
+        # Page 2: Answer Key with LaTeX formatting support
         fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
         ax_ans.axis('off')
         ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
         for i in range(10):
             left_idx = i
             right_idx = i + 10
-            step_l = ai_steps.get(left_idx+1, '').replace(". ", ".\n")
-            step_r = ai_steps.get(right_idx+1, '').replace(". ", ".\n")
+            step_l = ai_steps.get(left_idx+1, '')
+            step_r = ai_steps.get(right_idx+1, '')
             
             txt_l = f"Q{left_idx+1}: Ans: {problems[left_idx][2]}\n{step_l}"
             txt_r = f"Q{right_idx+1}: Ans: {problems[right_idx][2]}\n{step_r}"
             
             y_pos = 0.90 - (i * 0.088)
-            ax_ans.text(0.04, y_pos, txt_l, fontsize=7.5, va='top', wrap=True, family='monospace')
-            ax_ans.text(0.52, y_pos, txt_r, fontsize=7.5, va='top', wrap=True, family='monospace')
+            ax_ans.text(0.04, y_pos, txt_l, fontsize=7.5, va='top', wrap=True)
+            ax_ans.text(0.52, y_pos, txt_r, fontsize=7.5, va='top', wrap=True)
         pdf.savefig(fig_ans); plt.close(fig_ans)
 
     return buffer.getvalue()
@@ -400,7 +403,7 @@ if st.session_state.generating:
     with st.spinner("Drawing geometry..."):
         p_data = generate_trig_problem(st.session_state.trig_topic)
         st.session_state.trig_problem_data = p_data
-        st.session_state.problem_image_context = draw_triangle_image(p_data, size_px=350, label_padding=0.06)
+        st.session_state.problem_image_context = draw_triangle_image(p_data, size_px=380, label_padding=0.08)
         st.session_state.generating = False
         st.rerun()
 
@@ -480,7 +483,7 @@ else:
     else:
         ai_marking_component.render_grading_suite(
             bg_image=bg_image,
-            height_px=350,
+            height_px=380,
             key_prefix=f"trig_suite_{st.session_state.problem_suite_refresh_id}",
             solution_requirement=st.session_state.get('solution_req', 'demonstrated')
         )
