@@ -194,8 +194,16 @@ def draw_triangle_image(problem_data, height_px=220, width_px=220):
         normal = np.array([-vec[1], vec[0]]) 
         normal = normal / np.linalg.norm(normal)
         if np.dot(normal, mid - np.array([0.5, 0.5])) < 0: normal = -normal
-        pos = mid + normal * 0.05
-        ax.text(pos[0], pos[1], f"${text}$", fontsize=12, ha='center', va='center')
+        pos = mid + normal * 0.06
+        
+        # Calculate side gradient alignment and prevent upside-down text
+        angle_deg = np.degrees(np.arctan2(vec[1], vec[0]))
+        if angle_deg > 90:
+            angle_deg -= 180
+        elif angle_deg < -90:
+            angle_deg += 180
+
+        ax.text(pos[0], pos[1], f"${text}$", fontsize=12, ha='center', va='center', rotation=angle_deg, rotation_mode='anchor')
 
     place_label(Cf, Bf, labels['opp']) 
     place_label(Cf, Af, labels['adj']) 
@@ -242,7 +250,7 @@ def create_pdf_bytes(topic_setting):
             
         pdf.savefig(fig_ws); plt.close(fig_ws)
 
-        # Page 2: Answer Key with compact text wrapping (Fixed index lookup error)
+        # Page 2: Answer Key with compact text wrapping
         fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
         ax_ans.axis('off')
         ax_ans.text(0.5, 0.95, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
