@@ -221,7 +221,7 @@ def build_equations(problem_data, topic_setting):
     return correct, distractor1, distractor2
 
 # --- Visual Engine: UNIVERSAL MATPLOTLIB GEOMETRY WITH LEVEL 2 SUPPORT ---
-def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
+def draw_triangle_image(problem_data, size_px=380, label_padding=0.14):
     labels, rule_key, ans, text_desc, (a, b), target_var, sub_type, hyp_real, angle_deg, l2_type, l2_label = problem_data
     
     fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
@@ -246,31 +246,34 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     extra_arcs = []
     
     if labels['angle']:
-        extra_arcs.append((A, C, B, labels['angle']))
+        # Format: (Center, Pt1, Pt2, Label, ArcRadius, TextOffset)
+        extra_arcs.append((A, C, B, labels['angle'], 0.28, 0.21))
         
     pts_to_fit = [transform(C), transform(A), transform(B)]
     
-    # Generate Level 2 auxiliary geometry
+    # Generate Level 2 auxiliary geometry with visibly larger distinct radii to prevent continuous illusion
     if l2_type == 'complement':
-        extra_arcs.append((B, C, A, l2_label))
+        # The other interior acute angle is at vertex B
+        extra_arcs.append((B, C, A, l2_label, 0.28, 0.21))
     elif l2_type == 'supplementary':
         A_ext = A + (A - C) * 0.7
         extra_lines.append((A, A_ext, '-'))
-        extra_arcs.append((A, B, A_ext, l2_label))
+        extra_arcs.append((A, B, A_ext, l2_label, 0.36, 0.28))
         pts_to_fit.append(transform(A_ext))
     elif l2_type == 'vertical_opp':
         A_ext1 = A + (A - C) * 0.7
         A_ext2 = A + (A - B) * 0.7
         extra_lines.append((A, A_ext1, '-'))
         extra_lines.append((A, A_ext2, '-'))
-        extra_arcs.append((A, A_ext1, A_ext2, l2_label))
+        extra_arcs.append((A, A_ext1, A_ext2, l2_label, 0.36, 0.28))
         pts_to_fit.append(transform(A_ext1))
         pts_to_fit.append(transform(A_ext2))
     elif l2_type == 'parallel_Z':
         B_ext1 = B + (C - A) * 0.7
         B_ext2 = B + (A - C) * 0.7
         extra_lines.append((B_ext1, B_ext2, '--'))
-        extra_arcs.append((B, B_ext1, A, l2_label))
+        # Fix applied: Anchoring to B_ext2 (rightward) correctly maps the Z-angle transversal
+        extra_arcs.append((B, B_ext2, A, l2_label, 0.36, 0.28))
         pts_to_fit.append(transform(B_ext1))
         pts_to_fit.append(transform(B_ext2))
         
@@ -278,7 +281,8 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
     min_pt, max_pt = pts.min(axis=0), pts.max(axis=0)
     center = (min_pt + max_pt) / 2
     
-    scale = 0.72 / max(max_pt - min_pt)
+    # Reduced scale to 0.60 to ensure the expanded label_padding stays far from edges without clipping
+    scale = 0.60 / max(max_pt - min_pt)
     
     def final_pt(pt):
         return (transform(pt) - center) * scale + [0.5, 0.5]
@@ -302,8 +306,8 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
         p2f = final_pt(p2)
         ax.plot([p1f[0], p2f[0]], [p1f[1], p2f[1]], color='black', linestyle=style, lw=1.2)
         
-    # Draw universal arcs
-    for (pt_c, pt_1, pt_2, label) in extra_arcs:
+    # Draw universal arcs with variable radius mappings
+    for (pt_c, pt_1, pt_2, label, r_arc, r_txt) in extra_arcs:
         cf = final_pt(pt_c)
         p1f = final_pt(pt_1)
         p2f = final_pt(pt_2)
@@ -316,13 +320,14 @@ def draw_triangle_image(problem_data, size_px=380, label_padding=0.08):
         if max_ang - min_ang > 180:
             min_ang, max_ang = max_ang, min_ang + 360
             
-        arc = patches.Arc(cf, 0.28, 0.28, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
+        arc = patches.Arc(cf, r_arc, r_arc, angle=0.0, theta1=min_ang, theta2=max_ang, color='black', linewidth=1)
         ax.add_patch(arc)
         
         mid_rad = np.radians((min_ang + max_ang) / 2)
-        txt_pos = cf + 0.21 * np.array([np.cos(mid_rad), np.sin(mid_rad)])
+        txt_pos = cf + r_txt * np.array([np.cos(mid_rad), np.sin(mid_rad)])
         ax.text(txt_pos[0], txt_pos[1], f"${label}$", fontsize=11, ha='center', va='center')
 
+    # Heavy padding offset pushes side labels outward, safely away from vertex geometry
     def place_label(p1, p2, text):
         if not text: return
         mid = (p1 + p2) / 2
@@ -388,7 +393,7 @@ def create_pdf_bytes(topic_setting, level):
                 row, col = divmod(idx, 4)
                 ax = axes[row, col]
                 ax.axis('off')
-                img_buf = draw_triangle_image(p_data, size_px=220, label_padding=0.11)
+                img_buf = draw_triangle_image(p_data, size_px=220, label_padding=0.16)
                 ax.imshow(img_buf)
                 ax.set_title(f"Q{idx+1}", fontsize=10, fontweight='bold', pad=1)
                 
@@ -492,7 +497,7 @@ if st.session_state.generating:
     with st.spinner("Drawing geometry..."):
         p_data = generate_trig_problem(st.session_state.trig_topic, st.session_state.level)
         st.session_state.trig_problem_data = p_data
-        st.session_state.problem_image_context = draw_triangle_image(p_data, size_px=380, label_padding=0.08)
+        st.session_state.problem_image_context = draw_triangle_image(p_data, size_px=380, label_padding=0.14)
         st.session_state.generating = False
         st.rerun()
 
