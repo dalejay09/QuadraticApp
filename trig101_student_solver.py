@@ -319,35 +319,10 @@ else:
             
     else:
         # MODE 2: SOLVE (Master App delegates to the Universal Marker Widget)
-        TRIG_GRADING_HINTS = """
-        CRITICAL GEOMETRY/TRIGONOMETRY VISUAL PARSING RULES:
-        1. STEP 1 (OVERWRITING): Look exclusively at the current pen ink color alone. If that ink color alone shows the correct mathematical final answer (number or angle), treat it as correct and ignore the messy older ink underneath.
-        2. STEP 2 (COMBINED MARKUP): If Step 1 does not yield a correct answer, evaluate the tangled messy ink as a single, combined shape. If the combined colors together form the correct final answer, treat it as correct.
-        3. STEP 3 (DELETIONS): If you see distinct scribbles over old work, assume that specific messy part is deleted. Evaluate the remaining work.
-        """
-        
-        color_sequence_str = ", ".join(st.session_state.COLOR_NAMES)
-        current_color_str = st.session_state.COLOR_NAMES[st.session_state.current_marking_color_index]
-        
-        universal_prompt = f"""
-        You are an expert math tutor grading a student's Trigonometry/Geometry work.
-        The right-angled triangle problem to be solved is printed on the background image. Deduce the knowns and the unknown directly from the diagram.
-        
-        The student is using a sequence of pen colors: {color_sequence_str}.
-        They are currently writing in: {current_color_str}.
-        
-        {TRIG_GRADING_HINTS}
-        
-        GRADING INSTRUCTIONS:
-        - If Step 1 OR Step 2 OR Step 3 reveals the mathematically correct final answer for the missing side/angle, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message. Be highly forgiving of visual messiness.
-        - If their working is still incorrect, incomplete, or missing the final answer after trying all steps, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief, encouraging hint on what trig ratio or step to use next. Do not give the final answer.
-        """
-
         ai_marking_component.render_grading_suite(
             bg_image=bg_image,
             height_px=450,
-            grading_prompt_instructions=universal_prompt,
-            suite_key=f"trig_suite_{st.session_state.problem_suite_refresh_id}"
+            key_prefix=f"trig_suite_{st.session_state.problem_suite_refresh_id}"
         )
 
     st.write("---")
