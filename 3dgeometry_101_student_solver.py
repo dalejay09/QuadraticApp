@@ -57,29 +57,25 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
     formula_parts = []
     is_hollow = False
     
-    # Check if we should generate a hollow/bowl scenario (only valid for Volume with 2 shapes)
     if num_shapes == 2 and target_metric == "Volume" and random.choice([True, False]):
         is_hollow = True
         hollow_pairs = [
-            ("Box", "Box"),               # Box with box hole
-            ("Cylinder", "Cylinder"),     # Cylinder with cylinder hole (pipe/cup)
-            ("Hemisphere", "Hemisphere"), # Hemisphere with hemisphere bowl cavity
-            ("Box", "Cylinder"),          # Box with cylindrical hole
-            ("Box", "Hemisphere")         # Box with spherical/hemispherical socket
+            ("Box", "Box"),               
+            ("Cylinder", "Cylinder"),     
+            ("Hemisphere", "Hemisphere"), 
+            ("Box", "Cylinder"),          
+            ("Box", "Hemisphere")         
         ]
         outer_type, inner_type = random.choice(hollow_pairs)
         
-        # Outer shape dimensions
         r_out = random.randint(6, 10)
         w_out = r_out * 2
         h_out = random.randint(8, 14)
         
-        # Inner cavity dimensions (strictly smaller to fit inside)
         r_in = random.randint(3, r_out - 2)
         w_in = r_in * 2
         h_in = random.randint(4, h_out - 2)
         
-        # Calculate Outer Volume
         if outer_type == "Box":
             v_out = w_out * w_out * h_out
             formula_parts.append(f"lwh_{{{outer_type}}}")
@@ -93,7 +89,6 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
             formula_parts.append(f"\\frac{{2}}{{3}}\pi r^3_{{{outer_type}}}")
             stack.append({"type": outer_type, "r": r_out, "h": r_out, "is_cavity": False})
             
-        # Calculate Inner Cavity Volume (Subtracted)
         if inner_type == "Box":
             v_in = w_in * w_in * h_in
             formula_parts.append(f"- lwh_{{{inner_type}}}")
@@ -112,7 +107,6 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
         ans = round(total_val, 1)
         return stack, correct_formula_str, ans, "Volume", target_metric
 
-    # Standard Stacking Engine
     previous_shape = None
     current_r = random.randint(4, 8)
     
@@ -248,7 +242,6 @@ def draw_geometry_image(stack, size_px=380):
                 Y = r * np.sin(Phi) * np.sin(Theta)
                 Z = current_z + r * np.cos(Phi)
                 
-            # Render inner cavities with dashed/dotted styling to indicate hollow cutout
             ls = '--' if is_cav else '-'
             alpha_val = 0.3 if is_cav else 0.5
             ax.plot_wireframe(X, Y, Z, color='blue' if is_cav else 'black', linewidth=0.5, linestyle=ls, alpha=alpha_val)
@@ -284,7 +277,7 @@ def draw_geometry_image(stack, size_px=380):
             else:
                 ax.text(0, 0, current_z + h/2, f"Hole h={h}, w={w}", color='purple', fontsize=8)
 
-        current_z += h if not is_cav else 0 # Cavities sit recessed inside the outer shape
+        current_z += h if not is_cav else 0 
 
     ax.set_box_aspect([1, 1, current_z/max_w if max_w > 0 else 1]) 
 
@@ -494,7 +487,7 @@ else:
             
             correct_eq, dist1, dist2 = build_geom_equations(correct_formula, target_metric, st.session_state.num_shapes)
             
-            if 'id_eq_options' not in st.session_state || st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
+            if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
                 options = [f"${correct_eq}$", f"${dist1}$", f"${dist2}$"]
                 random.shuffle(options)
                 st.session_state.id_eq_options = options
