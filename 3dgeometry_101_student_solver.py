@@ -48,9 +48,9 @@ class WordProblemOutput(BaseModel):
 
 # --- Math Engine: 3D GEOMETRY ---
 def generate_geom_problem(target_metric="Volume", num_shapes=1):
-    shapes_pool = ["Cylinder", "Cone", "Box", "Hemisphere"]
+    shapes_pool = ["Cylinder", "Cone", "Box", "Hemisphere", "Pyramid", "Triangular Prism"]
     if target_metric == "Surface Area":
-        # Keep it slightly simpler for SA composites to avoid complex internal face subtractions
+        # Keep it restricted to simpler composites for SA to avoid complex internal face subtractions
         shapes_pool = ["Cylinder", "Box"] 
         
     stack = []
@@ -61,9 +61,17 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
     formula_parts = []
     
     for i in range(num_shapes):
-        shape = random.choice(shapes_pool)
-        if shape == "Hemisphere" and target_metric == "Surface Area": shape = "Cylinder" # Simplify SA composites
+        is_top_layer = (i == num_shapes - 1)
         
+        # Enforce physical stability: supporting layers must have flat tops
+        if is_top_layer:
+            shape = random.choice(shapes_pool)
+        else:
+            shape = random.choice(["Cylinder", "Box"])
+            
+        if shape == "Hemisphere" and target_metric == "Surface Area": 
+            shape = "Cylinder"
+            
         h = random.randint(4, 12)
         r = base_radius
         w = base_width
@@ -95,7 +103,26 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
             v = (2/3) * math.pi * (r**3)
             sa = 3 * math.pi * (r**2)
             formula_parts.append("\\frac{2}{3}\pi r^3" if target_metric == "Volume" else "3\pi r^2")
-            stack.append({"type": shape, "r": r, "h": r}) # height of hemi is its radius
+            stack.append({"type": shape, "r": r, "h": r}) 
+            total_val += v if target_metric == "Volume" else sa
+
+        elif shape == "Pyramid":
+            # Square based pyramid
+            l = w
+            v = (1/3) * (w**2) * h
+            s = math.hypot(w/2, h)
+            sa = w**2 + (2 * w * s)
+            formula_parts.append("\\frac{1}{3}w^2 h" if target_metric == "Volume" else "(w^2 + 2ws)")
+            stack.append({"type": shape, "w": w, "h": h})
+            total_val += v if target_metric == "Volume" else sa
+
+        elif shape == "Triangular Prism":
+            l = w
+            v = (1/2) * w * h * l
+            s = math.hypot(w/2, h)
+            sa = (w * l) + (w * h) + (2 * l * s)
+            formula_parts.append("\\frac{1}{2}whl" if target_metric == "Volume" else "(wl + wh + 2ls)")
+            stack.append({"type": shape, "w": w, "l": l, "h": h})
             total_val += v if target_metric == "Volume" else sa
 
     # Correct formula string
@@ -108,7 +135,7 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
 
 # --- Equations Generator (Identification Distractors) ---
 def build_geom_equations(correct_formula, target_metric, num_shapes):
-    distractor_pool_v = ["\pi r^2 h", "\\frac{1}{3}\pi r^2 h", "\\frac{4}{3}\pi r^3", "lwh", "\\frac{1}{2}bh"]
+    distractor_pool_v = ["\pi r^2 h", "\\frac{1}{3}\pi r^2 h", "\\frac{4}{3}\pi r^3", "lwh", "\\frac{1}{3}w^2 h", "\\frac{1}{2}whl"]
     distractor_pool_sa = ["2\pi r^2 + 2\pi rh", "\pi r^2 + \pi rs", "4\pi r^2", "2(lw + lh + wh)"]
     
     pool = distractor_pool_v if target_metric == "Volume" else distractor_pool_sa
@@ -120,7 +147,6 @@ def build_geom_equations(correct_formula, target_metric, num_shapes):
     d1 = f"{prefix} = " + " + ".join(dist1_parts)
     d2 = f"{prefix} = " + " + ".join(dist2_parts)
     
-    # Ensure they are unique
     if d1 == correct_formula: d1 = f"{prefix} = " + " + ".join([random.choice(pool)])
     if d2 == correct_formula or d2 == d1: d2 = f"{prefix} = " + " + ".join([random.choice(pool)])
         
@@ -150,13 +176,11 @@ def draw_geometry_image(stack, size_px=380):
                 X = r * np.cos(Theta)
                 Y = r * np.sin(Theta)
             elif shape == "Cone":
-                # Radius decreases linearly from r to 0 as Z goes from current_z to current_z + h
                 R = r * (1 - (Z - current_z) / h)
                 X = R * np.cos(Theta)
                 Y = R * np.sin(Theta)
             elif shape == "Hemisphere":
-                # Sphere equation relative to current_z
-                phi = np.linspace(0, np.pi/2, 30) # top half
+                phi = np.linspace(0, np.pi/2, 30) 
                 Phi, Theta = np.meshgrid(phi, theta_grid)
                 X = r * np.sin(Phi) * np.cos(Theta)
                 Y = r * np.sin(Phi) * np.sin(Theta)
@@ -164,7 +188,6 @@ def draw_geometry_image(stack, size_px=380):
                 
             ax.plot_wireframe(X, Y, Z, color='black', linewidth=0.5, alpha=0.5)
             
-            # Labeling
             if shape == "Cylinder":
                 ax.text(0, r*1.2, current_z + h/2, f"h={h}", color='red', fontsize=10)
                 ax.text(r/2, 0, current_z, f"r={r}", color='blue', fontsize=10)
@@ -176,11 +199,9 @@ def draw_geometry_image(stack, size_px=380):
         elif shape == "Box":
             w, l = obj['w'], obj['l']
             max_w = max(max_w, w, l)
-            # Create box vertices
             xx, yy = np.meshgrid([-w/2, w/2], [-l/2, l/2])
             ax.plot_surface(xx, yy, np.full_like(xx, current_z), color='gray', alpha=0.1, edgecolor='black')
             ax.plot_surface(xx, yy, np.full_like(xx, current_z + h), color='gray', alpha=0.1, edgecolor='black')
-            # Plot sides
             for x_edge in [-w/2, w/2]:
                 ax.plot_surface(np.full_like(xx, x_edge), yy, np.array([[current_z, current_z], [current_z+h, current_z+h]]), color='gray', alpha=0.1, edgecolor='black')
             for y_edge in [-l/2, l/2]:
@@ -190,9 +211,34 @@ def draw_geometry_image(stack, size_px=380):
             ax.text(w/2 + 2, 0, current_z, f"l={l}", color='green', fontsize=10)
             ax.text(-w/2 - 2, -l/2, current_z + h/2, f"h={h}", color='red', fontsize=10)
 
+        elif shape == "Pyramid":
+            w = obj['w']
+            max_w = max(max_w, w)
+            bx = [-w/2, w/2, w/2, -w/2, -w/2]
+            by = [-w/2, -w/2, w/2, w/2, -w/2]
+            bz = [current_z] * 5
+            ax.plot(bx, by, bz, color='black', linewidth=0.5, alpha=0.5)
+            for i in range(4):
+                ax.plot([bx[i], 0], [by[i], 0], [current_z, current_z + h], color='black', linewidth=0.5, alpha=0.5)
+                
+            ax.text(-w/2, -w/2 - 2, current_z, f"w={w}", color='blue', fontsize=10)
+            ax.text(0, 0, current_z + h/2, f"h={h}", color='red', fontsize=10)
+
+        elif shape == "Triangular Prism":
+            w, l = obj['w'], obj['l']
+            max_w = max(max_w, w, l)
+            ax.plot([-w/2, w/2, 0, -w/2], [-l/2, -l/2, -l/2, -l/2], [current_z, current_z, current_z + h, current_z], color='black', linewidth=0.5, alpha=0.5)
+            ax.plot([-w/2, w/2, 0, -w/2], [l/2, l/2, l/2, l/2], [current_z, current_z, current_z + h, current_z], color='black', linewidth=0.5, alpha=0.5)
+            ax.plot([-w/2, -w/2], [-l/2, l/2], [current_z, current_z], color='black', linewidth=0.5, alpha=0.5)
+            ax.plot([w/2, w/2], [-l/2, l/2], [current_z, current_z], color='black', linewidth=0.5, alpha=0.5)
+            ax.plot([0, 0], [-l/2, l/2], [current_z + h, current_z + h], color='black', linewidth=0.5, alpha=0.5)
+            
+            ax.text(-w/2, -l/2 - 2, current_z, f"w={w}", color='blue', fontsize=10)
+            ax.text(w/2 + 2, 0, current_z, f"l={l}", color='green', fontsize=10)
+            ax.text(-w/4, -l/2, current_z + h/2, f"h={h}", color='red', fontsize=10)
+
         current_z += h
 
-    # Make aspect ratio equal so shapes aren't distorted
     ax.set_box_aspect([1, 1, current_z/max_w if max_w > 0 else 1]) 
 
     buf = io.BytesIO()
