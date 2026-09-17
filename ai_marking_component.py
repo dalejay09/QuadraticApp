@@ -135,7 +135,7 @@ def render_grading_suite(
     """
 
     st.write("---")
-    if st.button("Check My Answer!", type="primary", use_keyword=True, use_container_width=True, key=k("check_btn")):
+    if st.button("Check My Answer!", type="primary", use_container_width=True, key=k("check_btn")):
         payload_images = []
         if canvas_result.image_data is not None and len(stroke_hist[-1]) > 0:
             ink = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA').resize(bg_image.size, Image.Resampling.LANCZOS)
