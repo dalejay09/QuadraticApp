@@ -207,13 +207,14 @@ def build_geom_equations(correct_formula, target_metric, num_shapes):
         
     return correct_formula, d1, d2
 
-# --- Visual Engine: 3D STACKED MATPLOTLIB GENERATOR (With Cavity Rendering) ---
+# --- Visual Engine: 3D STACKED MATPLOTLIB GENERATOR (Corrected Cavity Depths) ---
 def draw_geometry_image(stack, size_px=380):
     fig = plt.figure(figsize=(size_px/100, size_px/100), dpi=100)
     ax = fig.add_subplot(111, projection='3d')
     ax.axis('off')
     
     current_z = 0
+    outer_top_z = 0
     max_w = 0
     
     for obj in stack:
@@ -221,10 +222,17 @@ def draw_geometry_image(stack, size_px=380):
         h = obj['h']
         is_cav = obj.get('is_cavity', False)
         
+        # If it's a cavity, position its base at the top of the outer shape and extend downwards
+        if is_cav:
+            base_z = outer_top_z - h
+        else:
+            base_z = current_z
+            outer_top_z = current_z + h
+
         if shape in ["Cylinder", "Cone", "Hemisphere"]:
             r = obj['r']
             max_w = max(max_w, r*2)
-            z_grid = np.linspace(current_z, current_z + h, 30)
+            z_grid = np.linspace(base_z, base_z + h, 30)
             theta_grid = np.linspace(0, 2*np.pi, 30)
             Theta, Z = np.meshgrid(theta_grid, z_grid)
             
@@ -232,7 +240,7 @@ def draw_geometry_image(stack, size_px=380):
                 X = r * np.cos(Theta)
                 Y = r * np.sin(Theta)
             elif shape == "Cone":
-                R = r * (1 - (Z - current_z) / h)
+                R = r * (1 - (Z - base_z) / h)
                 X = R * np.cos(Theta)
                 Y = R * np.sin(Theta)
             elif shape == "Hemisphere":
@@ -240,7 +248,7 @@ def draw_geometry_image(stack, size_px=380):
                 Phi, Theta = np.meshgrid(phi, theta_grid)
                 X = r * np.sin(Phi) * np.cos(Theta)
                 Y = r * np.sin(Phi) * np.sin(Theta)
-                Z = current_z + r * np.cos(Phi)
+                Z = base_z + r * np.cos(Phi)
                 
             ls = '--' if is_cav else '-'
             alpha_val = 0.3 if is_cav else 0.5
@@ -248,12 +256,12 @@ def draw_geometry_image(stack, size_px=380):
             
             if not is_cav:
                 if shape == "Cylinder":
-                    ax.text(0, r*1.2, current_z + h/2, f"h={h}", color='red', fontsize=10)
-                    ax.text(r/2, 0, current_z, f"r={r}", color='blue', fontsize=10)
+                    ax.text(0, r*1.2, base_z + h/2, f"h={h}", color='red', fontsize=10)
+                    ax.text(r/2, 0, base_z, f"r={r}", color='blue', fontsize=10)
                 elif shape == "Hemisphere":
-                    ax.text(0, r*1.2, current_z + r/2, f"r={r}", color='blue', fontsize=10)
+                    ax.text(0, r*1.2, base_z + r/2, f"r={r}", color='blue', fontsize=10)
             else:
-                ax.text(0, 0, current_z + h/2, f"Cavity h={h}, r={r}", color='purple', fontsize=8)
+                ax.text(0, 0, base_z + h/2, f"Hole h={h}, r={r}", color='purple', fontsize=8)
                 
         elif shape == "Box":
             w, l = obj['w'], obj['l']
@@ -263,21 +271,22 @@ def draw_geometry_image(stack, size_px=380):
             ls = '--' if is_cav else '-'
             edge_col = 'blue' if is_cav else 'black'
             
-            ax.plot_surface(xx, yy, np.full_like(xx, current_z), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
-            ax.plot_surface(xx, yy, np.full_like(xx, current_z + h), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
+            ax.plot_surface(xx, yy, np.full_like(xx, base_z), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
+            ax.plot_surface(xx, yy, np.full_like(xx, base_z + h), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
             for x_edge in [-w/2, w/2]:
-                ax.plot_surface(np.full_like(xx, x_edge), yy, np.array([[current_z, current_z], [current_z+h, current_z+h]]), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
+                ax.plot_surface(np.full_like(xx, x_edge), yy, np.array([[base_z, base_z], [base_z+h, base_z+h]]), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
             for y_edge in [-l/2, l/2]:
-                ax.plot_surface(xx, np.full_like(yy, y_edge), np.array([[current_z, current_z], [current_z+h, current_z+h]]), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
+                ax.plot_surface(xx, np.full_like(yy, y_edge), np.array([[base_z, base_z], [base_z+h, base_z+h]]), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
                 
             if not is_cav:
-                ax.text(-w/2, -l/2 - 2, current_z, f"w={w}", color='blue', fontsize=10)
-                ax.text(w/2 + 2, 0, current_z, f"l={l}", color='green', fontsize=10)
-                ax.text(-w/2 - 2, -l/2, current_z + h/2, f"h={h}", color='red', fontsize=10)
+                ax.text(-w/2, -l/2 - 2, base_z, f"w={w}", color='blue', fontsize=10)
+                ax.text(w/2 + 2, 0, base_z, f"l={l}", color='green', fontsize=10)
+                ax.text(-w/2 - 2, -l/2, base_z + h/2, f"h={h}", color='red', fontsize=10)
             else:
-                ax.text(0, 0, current_z + h/2, f"Hole h={h}, w={w}", color='purple', fontsize=8)
+                ax.text(0, 0, base_z + h/2, f"Hole h={h}, w={w}", color='purple', fontsize=8)
 
-        current_z += h if not is_cav else 0 
+        if not is_cav:
+            current_z += h
 
     ax.set_box_aspect([1, 1, current_z/max_w if max_w > 0 else 1]) 
 
@@ -487,7 +496,7 @@ else:
             
             correct_eq, dist1, dist2 = build_geom_equations(correct_formula, target_metric, st.session_state.num_shapes)
             
-            if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
+            if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id'] != st.session_state.problem_suite_refresh_id:
                 options = [f"${correct_eq}$", f"${dist1}$", f"${dist2}$"]
                 random.shuffle(options)
                 st.session_state.id_eq_options = options
