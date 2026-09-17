@@ -222,7 +222,6 @@ def draw_geometry_image(stack, size_px=380):
         h = obj['h']
         is_cav = obj.get('is_cavity', False)
         
-        # If it's a cavity, position its base at the top of the outer shape and extend downwards
         if is_cav:
             base_z = outer_top_z - h
         else:
@@ -496,7 +495,7 @@ else:
             
             correct_eq, dist1, dist2 = build_geom_equations(correct_formula, target_metric, st.session_state.num_shapes)
             
-            if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id'] != st.session_state.problem_suite_refresh_id:
+            if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
                 options = [f"${correct_eq}$", f"${dist1}$", f"${dist2}$"]
                 random.shuffle(options)
                 st.session_state.id_eq_options = options
