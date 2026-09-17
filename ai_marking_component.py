@@ -11,12 +11,12 @@ def render_grading_suite(
     height_px, 
     key_prefix="generic_marking", 
     show_experimental_toolbar=False,
-    solution_requirement="demonstrated"
+    solution_requirement="demonstrated",
+    problem_context=""
 ):
     """
     Encapsulated logic for problem canvas, markup, Undo/Clear, Photo Snap, and AI Grading.
-    This component assumes the background image contains textbook-quality pre-rendered
-    problems, and the student provides handwritten workings on top or via photo snap.
+    Accepts an optional problem_context string to provide ground-truth metadata to the AI marker.
     """
     
     # --- Internal Key Encapsulation ---
@@ -36,7 +36,6 @@ def render_grading_suite(
     if 'current_marking_color_index' not in st.session_state:
         st.session_state.current_marking_color_index = 0
         
-    # Ensure safe initialization of all session state keys before any reads
     if k("init") not in st.session_state or st.session_state.get(k("init")) == False:
         st.session_state[FEEDBACK_KEY] = ""
         st.session_state[CANVAS_KEY] = 0
@@ -51,7 +50,6 @@ def render_grading_suite(
     current_color_index = st.session_state.current_marking_color_index
     current_color_name = COLOR_NAMES[current_color_index]
     
-    # Use .get() to safely fall back if state is reset during a rerun
     current_tool = st.session_state.get(TOOL_SELECTOR_KEY, "🖌️")
     active_stroke_color = PEN_COLORS[current_color_index] if current_tool == "🖌️" else "#FFFFFE"
     active_stroke_width = 3 if current_tool == "🖌️" else 15
@@ -64,55 +62,6 @@ def render_grading_suite(
         drawing_mode="freedraw", return_image_data=True, initial_drawing=st.session_state.get(INITIAL_DWG_KEY, {"version": "4.4.0", "objects": []}), 
         key=k(f"canvas_{st.session_state.get(CANVAS_KEY, 0)}")
     )
-
-    if show_experimental_toolbar:
-        st.caption("🔬 *Scribble Toolbar (Tap an icon!)*")
-        icons = ["🖌️", "🧽", "↩️", "🗑️", "📸"]
-        toolbar_objects = []
-        baselines = {"🖌️": 20, "🧽": 90, "↩️": 160, "🗑️": 230, "📸": 300}
-        for i, icon in enumerate(icons):
-            toolbar_objects.append({"type": "i-text", "text": icon, "left": baselines[icon] - 12, "top": 5, "fontSize": 24, "selectable": False})
-            if i < 4:
-                toolbar_objects.append({"type": "line", "x1": (i+1)*70, "y1": 5, "x2": (i+1)*70, "y2": 40, "stroke": "#d1d5db", "strokeWidth": 2, "selectable": False})
-
-        toolbar_initial = {"version": "4.4.0", "objects": toolbar_objects}
-
-        toolbar_result = st_canvas(
-            fill_color="rgba(0,0,0,0)", stroke_width=2, stroke_color="#007AFF", background_color="#f3f4f6", update_streamlit=True,
-            height=45, width=350, drawing_mode="freedraw", initial_drawing=toolbar_initial,
-            key=k(f"exp_toolbar_{st.session_state.get(EXP_TOOLBAR_KEY, 0)}")
-        )
-
-        if toolbar_result.json_data is not None:
-            objects = toolbar_result.json_data.get("objects", [])
-            if len(objects) > 9:
-                new_stroke = objects[-1]
-                stroke_center_x = new_stroke.get("left", 0) + (new_stroke.get("width", 0) * new_stroke.get("scaleX", 1) / 2)
-                
-                action = None
-                if 0 <= stroke_center_x < 70: action = "🖌️"
-                elif 70 <= stroke_center_x < 140: action = "🧽"
-                elif 140 <= stroke_center_x < 210: action = "↩️"
-                elif 210 <= stroke_center_x < 280: action = "🗑️"
-                elif 280 <= stroke_center_x <= 350: action = "📸"
-                
-                if action:
-                    st.toast(f"Toolbar Tapped: {action}")
-                    if action in ["🖌️", "🧽"]: st.session_state[TOOL_SELECTOR_KEY] = action
-                    hist = st.session_state.get(STROKE_HIST_KEY, [[]])
-                    if action == "↩️" and len(hist) > 1:
-                        hist.pop()
-                        st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": hist[-1]}
-                        st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
-                    if action == "🗑️":
-                        st.session_state[STROKE_HIST_KEY] = [[]]
-                        st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": []}
-                        st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
-                    if action == "📸":
-                        st.session_state[CAMERA_STATE_KEY] = not st.session_state.get(CAMERA_STATE_KEY, False)
-                
-                st.session_state[EXP_TOOLBAR_KEY] = st.session_state.get(EXP_TOOLBAR_KEY, 0) + 1
-                st.rerun()
 
     st.write("---")
     t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
@@ -160,19 +109,20 @@ def render_grading_suite(
     
     if solution_requirement == "numeric":
         requirement_rule = (
-            "- REQUIREMENT (NUMERIC STRICT): The student MUST fully calculate out the final decimal number (e.g., evaluating square roots like sqrt(170) into a decimal like 13.04, or evaluating trigonometric fractions into a final number). "
-            "If they stop at an unevaluated expression, fraction, or radical like 'c = sqrt(170)' or 'x = 11 / sin(51)', you MUST mark it INCORRECT and instruct them to evaluate it to a decimal number."
+            "- REQUIREMENT (NUMERIC STRICT): The student MUST fully calculate out the final decimal number. "
+            "If they stop at an unevaluated expression or radical, you MUST mark it INCORRECT."
         )
     else:
         requirement_rule = (
-            "- REQUIREMENT (DEMONSTRATED): Demonstrating the correct mathematical setup is sufficient, but the student MUST isolate the target variable as the subject of the equation (e.g., 'x = 40 * tan(52)' or 'x = 11 / sin(51)'). "
-            "If they stop at the initial ratio setup before isolating the variable (e.g., writing 'tan(52) = x / 40' but going no further), you MUST mark it INCORRECT and gently instruct them to rearrange the equation to make the unknown variable the subject. A final calculated decimal value is optional."
+            "- REQUIREMENT (DEMONSTRATED): Demonstrating the correct mathematical setup is sufficient, but the student MUST isolate the target variable as the subject of the equation."
         )
+    
+    context_section = f"\nGROUND TRUTH PROBLEM CONTEXT:\n{problem_context}\n" if problem_context else ""
     
     marking_prompt = f"""
     You are an expert, encouraging math tutor grading a student's handwritten work.
-    The problem to be solved is written on the provided canvas/image as Textbook printed text. Deduce the question being solved directly from the printed material on the image.
-    
+    The problem to be solved is rendered on the provided canvas/image.
+    {context_section}
     The student is using a sequence of handwritten pen colors to show their progress over time. 
     The full sequence of colors they cycle through is: {color_sequence_str}.
     They are currently writing in: {current_color_name}.
@@ -180,13 +130,12 @@ def render_grading_suite(
     {requirement_rule}
     
     CRITICAL VISUAL GRADING RULE:
-    - If the student solves the deduced background problem correctly using the chronology of their workings and fulfills the stated requirement above, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
-    - If their solution or step-by-step working against the deduced background problem is incorrect or misses the required format, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief hint on what to do next. Do NOT give them the final answer.
+    - If the student solves the problem correctly using the chronology of their workings and fulfills the stated requirement above, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
+    - If their solution or step-by-step working is incorrect or misses the required format, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief hint on what to do next. Do NOT give them the final answer.
     """
 
     st.write("---")
-    if st.button("Check My Answer!", type="primary", use_container_width=True, key=k("check_btn")):
-        
+    if st.button("Check My Answer!", type="primary", use_keyword=True, use_container_width=True, key=k("check_btn")):
         payload_images = []
         if canvas_result.image_data is not None and len(stroke_hist[-1]) > 0:
             ink = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA').resize(bg_image.size, Image.Resampling.LANCZOS)

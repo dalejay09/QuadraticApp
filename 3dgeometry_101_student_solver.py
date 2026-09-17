@@ -50,7 +50,6 @@ class WordProblemOutput(BaseModel):
 def generate_geom_problem(target_metric="Volume", num_shapes=1):
     shapes_pool = ["Cylinder", "Cone", "Box", "Hemisphere", "Pyramid", "Triangular Prism"]
     if target_metric == "Surface Area":
-        # Keep it restricted to simpler composites for SA to avoid complex internal face subtractions
         shapes_pool = ["Cylinder", "Box"] 
         
     stack = []
@@ -63,7 +62,6 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
     for i in range(num_shapes):
         is_top_layer = (i == num_shapes - 1)
         
-        # Enforce physical stability: supporting layers must have flat tops
         if is_top_layer:
             shape = random.choice(shapes_pool)
         else:
@@ -107,7 +105,6 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
             total_val += v if target_metric == "Volume" else sa
 
         elif shape == "Pyramid":
-            # Square based pyramid
             l = w
             v = (1/3) * (w**2) * h
             s = math.hypot(w/2, h)
@@ -125,9 +122,7 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
             stack.append({"type": shape, "w": w, "l": l, "h": h})
             total_val += v if target_metric == "Volume" else sa
 
-    # Correct formula string
     correct_formula_str = f"{'V' if target_metric == 'Volume' else 'SA'} = " + " + ".join(formula_parts)
-    
     target_var = "Volume" if target_metric == "Volume" else "Surface Area"
     ans = round(total_val, 1)
     
@@ -246,7 +241,6 @@ def draw_geometry_image(stack, size_px=380):
     plt.close(fig)
     buf.seek(0)
     return Image.open(buf).convert('RGBA').copy()
-
 
 # --- Word Problem Engine ---
 def generate_geom_word_problem(level, target_metric, num_shapes):
@@ -471,12 +465,18 @@ else:
     else:
         canvas_height = 380 if st.session_state.question_type == "Graphical" else 760
         
-        # We hook into the exact same ai_marking_component!
+        if st.session_state.question_type == "Graphical":
+            shape_sequence = [s['type'] for s in stack]
+            problem_context = f"This is a 3D composite graphical problem calculating {target_metric}. The stacked layers from bottom to top are: {shape_sequence}. The correct final target answer value is approximately {ans}."
+        else:
+            problem_context = f"This is a 3D word problem. The target variable to solve is '{target_var}'."
+
         ai_marking_component.render_grading_suite(
             bg_image=bg_image,
             height_px=canvas_height,
             key_prefix=f"geom_suite_{st.session_state.problem_suite_refresh_id}",
-            solution_requirement=st.session_state.get('solution_req', 'demonstrated')
+            solution_requirement=st.session_state.get('solution_req', 'demonstrated'),
+            problem_context=problem_context
         )
 
     st.write("---")
