@@ -46,39 +46,105 @@ class WordProblemOutput(BaseModel):
     problem_text: str = Field(description="The problem statement text")
     target_variable: str = Field(description="The target variable name")
 
-# --- Math Engine: 3D GEOMETRY ---
+# --- Math Engine: 3D GEOMETRY (With Hollow Cavity Support) ---
 def generate_geom_problem(target_metric="Volume", num_shapes=1):
-    shapes_pool = ["Cylinder", "Cone", "Box", "Hemisphere", "Pyramid", "Triangular Prism"]
+    all_shapes_pool = ["Cylinder", "Cone", "Box", "Hemisphere", "Pyramid", "Triangular Prism"]
     if target_metric == "Surface Area":
-        shapes_pool = ["Cylinder", "Box"] 
+        all_shapes_pool = ["Cylinder", "Box"] 
         
     stack = []
-    base_radius = random.randint(3, 10)
-    base_width = base_radius * 2
-    
     total_val = 0
     formula_parts = []
+    is_hollow = False
+    
+    # Check if we should generate a hollow/bowl scenario (only valid for Volume with 2 shapes)
+    if num_shapes == 2 and target_metric == "Volume" and random.choice([True, False]):
+        is_hollow = True
+        hollow_pairs = [
+            ("Box", "Box"),               # Box with box hole
+            ("Cylinder", "Cylinder"),     # Cylinder with cylinder hole (pipe/cup)
+            ("Hemisphere", "Hemisphere"), # Hemisphere with hemisphere bowl cavity
+            ("Box", "Cylinder"),          # Box with cylindrical hole
+            ("Box", "Hemisphere")         # Box with spherical/hemispherical socket
+        ]
+        outer_type, inner_type = random.choice(hollow_pairs)
+        
+        # Outer shape dimensions
+        r_out = random.randint(6, 10)
+        w_out = r_out * 2
+        h_out = random.randint(8, 14)
+        
+        # Inner cavity dimensions (strictly smaller to fit inside)
+        r_in = random.randint(3, r_out - 2)
+        w_in = r_in * 2
+        h_in = random.randint(4, h_out - 2)
+        
+        # Calculate Outer Volume
+        if outer_type == "Box":
+            v_out = w_out * w_out * h_out
+            formula_parts.append(f"lwh_{{{outer_type}}}")
+            stack.append({"type": outer_type, "w": w_out, "l": w_out, "h": h_out, "is_cavity": False})
+        elif outer_type == "Cylinder":
+            v_out = math.pi * (r_out**2) * h_out
+            formula_parts.append(f"\pi r^2 h_{{{outer_type}}}")
+            stack.append({"type": outer_type, "r": r_out, "h": h_out, "is_cavity": False})
+        elif outer_type == "Hemisphere":
+            v_out = (2/3) * math.pi * (r_out**3)
+            formula_parts.append(f"\\frac{{2}}{{3}}\pi r^3_{{{outer_type}}}")
+            stack.append({"type": outer_type, "r": r_out, "h": r_out, "is_cavity": False})
+            
+        # Calculate Inner Cavity Volume (Subtracted)
+        if inner_type == "Box":
+            v_in = w_in * w_in * h_in
+            formula_parts.append(f"- lwh_{{{inner_type}}}")
+            stack.append({"type": inner_type, "w": w_in, "l": w_in, "h": h_in, "is_cavity": True})
+        elif inner_type == "Cylinder":
+            v_in = math.pi * (r_in**2) * h_in
+            formula_parts.append(f"- \pi r^2 h_{{{inner_type}}}")
+            stack.append({"type": inner_type, "r": r_in, "h": h_in, "is_cavity": True})
+        elif inner_type == "Hemisphere":
+            v_in = (2/3) * math.pi * (r_in**3)
+            formula_parts.append(f"- \\frac{{2}}{{3}}\pi r^3_{{{inner_type}}}")
+            stack.append({"type": inner_type, "r": r_in, "h": r_in, "is_cavity": True})
+            
+        total_val = v_out - v_in
+        correct_formula_str = f"V = " + " ".join(formula_parts)
+        ans = round(total_val, 1)
+        return stack, correct_formula_str, ans, "Volume", target_metric
+
+    # Standard Stacking Engine
+    previous_shape = None
+    current_r = random.randint(4, 8)
     
     for i in range(num_shapes):
         is_top_layer = (i == num_shapes - 1)
+        available_pool = [s for s in all_shapes_pool if s != previous_shape]
+        if not available_pool: available_pool = all_shapes_pool
         
         if is_top_layer:
-            shape = random.choice(shapes_pool)
+            shape = random.choice(available_pool)
         else:
-            shape = random.choice(["Cylinder", "Box"])
+            flat_pool = [s for s in ["Cylinder", "Box"] if s != previous_shape]
+            if not flat_pool: flat_pool = ["Cylinder", "Box"]
+            shape = random.choice(flat_pool)
             
         if shape == "Hemisphere" and target_metric == "Surface Area": 
             shape = "Cylinder"
             
-        h = random.randint(4, 12)
-        r = base_radius
-        w = base_width
+        if i > 0:
+            r = random.randint(max(3, current_r - 2), current_r)
+        else:
+            r = current_r
+            
+        current_r = r
+        w = r * 2
+        h = random.randint(4, 10)
         
         if shape == "Cylinder":
             v = math.pi * (r**2) * h
             sa = (2 * math.pi * r**2) + (2 * math.pi * r * h)
             formula_parts.append("\pi r^2 h" if target_metric == "Volume" else "(2\pi r^2 + 2\pi rh)")
-            stack.append({"type": shape, "r": r, "h": h})
+            stack.append({"type": shape, "r": r, "h": h, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
             
         elif shape == "Cone":
@@ -86,41 +152,41 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
             s = math.hypot(r, h)
             sa = (math.pi * r**2) + (math.pi * r * s)
             formula_parts.append("\\frac{1}{3}\pi r^2 h" if target_metric == "Volume" else "(\pi r^2 + \pi rs)")
-            stack.append({"type": shape, "r": r, "h": h})
+            stack.append({"type": shape, "r": r, "h": h, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
             
         elif shape == "Box":
-            l = base_width
+            l = w
             v = l * w * h
             sa = 2*(l*w) + 2*(l*h) + 2*(w*h)
             formula_parts.append("lwh" if target_metric == "Volume" else "2(lw + lh + wh)")
-            stack.append({"type": shape, "w": w, "l": l, "h": h})
+            stack.append({"type": shape, "w": w, "l": l, "h": h, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
             
         elif shape == "Hemisphere":
             v = (2/3) * math.pi * (r**3)
             sa = 3 * math.pi * (r**2)
             formula_parts.append("\\frac{2}{3}\pi r^3" if target_metric == "Volume" else "3\pi r^2")
-            stack.append({"type": shape, "r": r, "h": r}) 
+            stack.append({"type": shape, "r": r, "h": r, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
 
         elif shape == "Pyramid":
-            l = w
             v = (1/3) * (w**2) * h
             s = math.hypot(w/2, h)
             sa = w**2 + (2 * w * s)
             formula_parts.append("\\frac{1}{3}w^2 h" if target_metric == "Volume" else "(w^2 + 2ws)")
-            stack.append({"type": shape, "w": w, "h": h})
+            stack.append({"type": shape, "w": w, "h": h, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
 
         elif shape == "Triangular Prism":
-            l = w
-            v = (1/2) * w * h * l
+            v = (1/2) * w * h * w
             s = math.hypot(w/2, h)
-            sa = (w * l) + (w * h) + (2 * l * s)
+            sa = (w * w) + (w * h) + (2 * w * s)
             formula_parts.append("\\frac{1}{2}whl" if target_metric == "Volume" else "(wl + wh + 2ls)")
-            stack.append({"type": shape, "w": w, "l": l, "h": h})
+            stack.append({"type": shape, "w": w, "l": w, "h": h, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
+
+        previous_shape = shape
 
     correct_formula_str = f"{'V' if target_metric == 'Volume' else 'SA'} = " + " + ".join(formula_parts)
     target_var = "Volume" if target_metric == "Volume" else "Surface Area"
@@ -147,7 +213,7 @@ def build_geom_equations(correct_formula, target_metric, num_shapes):
         
     return correct_formula, d1, d2
 
-# --- Visual Engine: 3D STACKED MATPLOTLIB GENERATOR ---
+# --- Visual Engine: 3D STACKED MATPLOTLIB GENERATOR (With Cavity Rendering) ---
 def draw_geometry_image(stack, size_px=380):
     fig = plt.figure(figsize=(size_px/100, size_px/100), dpi=100)
     ax = fig.add_subplot(111, projection='3d')
@@ -159,6 +225,7 @@ def draw_geometry_image(stack, size_px=380):
     for obj in stack:
         shape = obj['type']
         h = obj['h']
+        is_cav = obj.get('is_cavity', False)
         
         if shape in ["Cylinder", "Cone", "Hemisphere"]:
             r = obj['r']
@@ -181,58 +248,43 @@ def draw_geometry_image(stack, size_px=380):
                 Y = r * np.sin(Phi) * np.sin(Theta)
                 Z = current_z + r * np.cos(Phi)
                 
-            ax.plot_wireframe(X, Y, Z, color='black', linewidth=0.5, alpha=0.5)
+            # Render inner cavities with dashed/dotted styling to indicate hollow cutout
+            ls = '--' if is_cav else '-'
+            alpha_val = 0.3 if is_cav else 0.5
+            ax.plot_wireframe(X, Y, Z, color='blue' if is_cav else 'black', linewidth=0.5, linestyle=ls, alpha=alpha_val)
             
-            if shape == "Cylinder":
-                ax.text(0, r*1.2, current_z + h/2, f"h={h}", color='red', fontsize=10)
-                ax.text(r/2, 0, current_z, f"r={r}", color='blue', fontsize=10)
-            elif shape == "Cone":
-                ax.text(0, r*1.2, current_z + h/3, f"h={h}", color='red', fontsize=10)
-            elif shape == "Hemisphere":
-                ax.text(0, r*1.2, current_z + r/2, f"r={r}", color='blue', fontsize=10)
+            if not is_cav:
+                if shape == "Cylinder":
+                    ax.text(0, r*1.2, current_z + h/2, f"h={h}", color='red', fontsize=10)
+                    ax.text(r/2, 0, current_z, f"r={r}", color='blue', fontsize=10)
+                elif shape == "Hemisphere":
+                    ax.text(0, r*1.2, current_z + r/2, f"r={r}", color='blue', fontsize=10)
+            else:
+                ax.text(0, 0, current_z + h/2, f"Cavity h={h}, r={r}", color='purple', fontsize=8)
                 
         elif shape == "Box":
             w, l = obj['w'], obj['l']
             max_w = max(max_w, w, l)
             xx, yy = np.meshgrid([-w/2, w/2], [-l/2, l/2])
-            ax.plot_surface(xx, yy, np.full_like(xx, current_z), color='gray', alpha=0.1, edgecolor='black')
-            ax.plot_surface(xx, yy, np.full_like(xx, current_z + h), color='gray', alpha=0.1, edgecolor='black')
-            for x_edge in [-w/2, w/2]:
-                ax.plot_surface(np.full_like(xx, x_edge), yy, np.array([[current_z, current_z], [current_z+h, current_z+h]]), color='gray', alpha=0.1, edgecolor='black')
-            for y_edge in [-l/2, l/2]:
-                ax.plot_surface(xx, np.full_like(yy, y_edge), np.array([[current_z, current_z], [current_z+h, current_z+h]]), color='gray', alpha=0.1, edgecolor='black')
-                
-            ax.text(-w/2, -l/2 - 2, current_z, f"w={w}", color='blue', fontsize=10)
-            ax.text(w/2 + 2, 0, current_z, f"l={l}", color='green', fontsize=10)
-            ax.text(-w/2 - 2, -l/2, current_z + h/2, f"h={h}", color='red', fontsize=10)
-
-        elif shape == "Pyramid":
-            w = obj['w']
-            max_w = max(max_w, w)
-            bx = [-w/2, w/2, w/2, -w/2, -w/2]
-            by = [-w/2, -w/2, w/2, w/2, -w/2]
-            bz = [current_z] * 5
-            ax.plot(bx, by, bz, color='black', linewidth=0.5, alpha=0.5)
-            for i in range(4):
-                ax.plot([bx[i], 0], [by[i], 0], [current_z, current_z + h], color='black', linewidth=0.5, alpha=0.5)
-                
-            ax.text(-w/2, -w/2 - 2, current_z, f"w={w}", color='blue', fontsize=10)
-            ax.text(0, 0, current_z + h/2, f"h={h}", color='red', fontsize=10)
-
-        elif shape == "Triangular Prism":
-            w, l = obj['w'], obj['l']
-            max_w = max(max_w, w, l)
-            ax.plot([-w/2, w/2, 0, -w/2], [-l/2, -l/2, -l/2, -l/2], [current_z, current_z, current_z + h, current_z], color='black', linewidth=0.5, alpha=0.5)
-            ax.plot([-w/2, w/2, 0, -w/2], [l/2, l/2, l/2, l/2], [current_z, current_z, current_z + h, current_z], color='black', linewidth=0.5, alpha=0.5)
-            ax.plot([-w/2, -w/2], [-l/2, l/2], [current_z, current_z], color='black', linewidth=0.5, alpha=0.5)
-            ax.plot([w/2, w/2], [-l/2, l/2], [current_z, current_z], color='black', linewidth=0.5, alpha=0.5)
-            ax.plot([0, 0], [-l/2, l/2], [current_z + h, current_z + h], color='black', linewidth=0.5, alpha=0.5)
             
-            ax.text(-w/2, -l/2 - 2, current_z, f"w={w}", color='blue', fontsize=10)
-            ax.text(w/2 + 2, 0, current_z, f"l={l}", color='green', fontsize=10)
-            ax.text(-w/4, -l/2, current_z + h/2, f"h={h}", color='red', fontsize=10)
+            ls = '--' if is_cav else '-'
+            edge_col = 'blue' if is_cav else 'black'
+            
+            ax.plot_surface(xx, yy, np.full_like(xx, current_z), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
+            ax.plot_surface(xx, yy, np.full_like(xx, current_z + h), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
+            for x_edge in [-w/2, w/2]:
+                ax.plot_surface(np.full_like(xx, x_edge), yy, np.array([[current_z, current_z], [current_z+h, current_z+h]]), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
+            for y_edge in [-l/2, l/2]:
+                ax.plot_surface(xx, np.full_like(yy, y_edge), np.array([[current_z, current_z], [current_z+h, current_z+h]]), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
+                
+            if not is_cav:
+                ax.text(-w/2, -l/2 - 2, current_z, f"w={w}", color='blue', fontsize=10)
+                ax.text(w/2 + 2, 0, current_z, f"l={l}", color='green', fontsize=10)
+                ax.text(-w/2 - 2, -l/2, current_z + h/2, f"h={h}", color='red', fontsize=10)
+            else:
+                ax.text(0, 0, current_z + h/2, f"Hole h={h}, w={w}", color='purple', fontsize=8)
 
-        current_z += h
+        current_z += h if not is_cav else 0 # Cavities sit recessed inside the outer shape
 
     ax.set_box_aspect([1, 1, current_z/max_w if max_w > 0 else 1]) 
 
@@ -442,7 +494,7 @@ else:
             
             correct_eq, dist1, dist2 = build_geom_equations(correct_formula, target_metric, st.session_state.num_shapes)
             
-            if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
+            if 'id_eq_options' not in st.session_state || st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
                 options = [f"${correct_eq}$", f"${dist1}$", f"${dist2}$"]
                 random.shuffle(options)
                 st.session_state.id_eq_options = options
@@ -458,16 +510,17 @@ else:
                 if col.button(opt, use_container_width=True, key=f"eq_btn_{idx}"):
                     check_eq(opt)
             
-            if st.session_state.id_feedback:
-                if "Correct" in st.session_state.id_feedback: st.success(f"🌟 {st.session_state.id_feedback}")
-                else: st.warning(f"🤖 {st.session_state.id_feedback}")
+            f_msg = st.session_state.get('id_feedback', '')
+            if f_msg:
+                if "Correct" in f_msg: st.success(f"🌟 {f_msg}")
+                else: st.warning(f"🤖 {f_msg}")
             
     else:
         canvas_height = 380 if st.session_state.question_type == "Graphical" else 760
         
         if st.session_state.question_type == "Graphical":
-            shape_sequence = [s['type'] for s in stack]
-            problem_context = f"This is a 3D composite graphical problem calculating {target_metric}. The stacked layers from bottom to top are: {shape_sequence}. The correct final target answer value is approximately {ans}."
+            shape_sequence = [f"{s['type']} (Cavity: {s.get('is_cavity', False)})" for s in stack]
+            problem_context = f"This is a 3D composite graphical problem calculating {target_metric}. Components: {shape_sequence}. The correct final target answer value is approximately {ans}."
         else:
             problem_context = f"This is a 3D word problem. The target variable to solve is '{target_var}'."
 
