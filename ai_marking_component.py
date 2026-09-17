@@ -165,7 +165,8 @@ def render_grading_suite(
         )
     else:
         requirement_rule = (
-            "- REQUIREMENT (DEMONSTRATED): Demonstrating the correct mathematical setup/method (e.g., algebraic formula or expression ready for calculator input, such as leaving it as sqrt(170)) is sufficient. A final calculated numeric value is optional."
+            "- REQUIREMENT (DEMONSTRATED): Demonstrating the correct mathematical setup is sufficient, but the student MUST isolate the target variable as the subject of the equation (e.g., 'x = 40 * tan(52)' or 'x = 11 / sin(51)'). "
+            "If they stop at the initial ratio setup before isolating the variable (e.g., writing 'tan(52) = x / 40' but going no further), you MUST mark it INCORRECT and gently instruct them to rearrange the equation to make the unknown variable the subject. A final calculated decimal value is optional."
         )
     
     marking_prompt = f"""
