@@ -131,58 +131,66 @@ questions = [
     }
 ]
 
-# Initialize Session State
-if 'shuffled_questions' not in st.session_state:
-    # Shuffle the questions once per session
-    shuffled_qs = questions.copy()
-    random.shuffle(shuffled_qs)
-    st.session_state.shuffled_questions = shuffled_qs
-    
-    st.session_state.current_q = 0
-    st.session_state.score = 0
-    st.session_state.answered = False
-    st.session_state.shuffled_options = []
-    st.session_state.user_selection = None
+TOTAL_QUESTIONS = len(questions)
 
 def initialize_options():
-    opts = st.session_state.shuffled_questions[st.session_state.current_q]['options'].copy()
-    random.shuffle(opts)
-    st.session_state.shuffled_options = opts
-
-if not st.session_state.shuffled_options and st.session_state.current_q < len(st.session_state.shuffled_questions):
-    initialize_options()
-
-def next_question():
-    st.session_state.current_q += 1
-    st.session_state.answered = False
-    st.session_state.user_selection = None
-    if st.session_state.current_q < len(st.session_state.shuffled_questions):
-        initialize_options()
+    if st.session_state.current_question_data:
+        opts = st.session_state.current_question_data['options'].copy()
+        random.shuffle(opts)
+        st.session_state.shuffled_options = opts
 
 def restart_quiz():
-    shuffled_qs = questions.copy()
-    random.shuffle(shuffled_qs)
-    st.session_state.shuffled_questions = shuffled_qs
+    # Load all questions into the remaining pool and shuffle
+    st.session_state.remaining_questions = questions.copy()
+    random.shuffle(st.session_state.remaining_questions)
+    # Pop the first question to become the active question
+    st.session_state.current_question_data = st.session_state.remaining_questions.pop(0)
     
-    st.session_state.current_q = 0
-    st.session_state.score = 0
+    st.session_state.mastered = 0
+    st.session_state.attempts = 0
+    st.session_state.form_key_counter = 0
     st.session_state.answered = False
     st.session_state.user_selection = None
     initialize_options()
+
+# Initialize Session State
+if 'remaining_questions' not in st.session_state:
+    restart_quiz()
+
+def next_question():
+    q = st.session_state.current_question_data
+    was_correct = (st.session_state.user_selection == q['answer'])
+    
+    if was_correct:
+        st.session_state.mastered += 1
+    else:
+        # If wrong, put it back at the end of the deck
+        st.session_state.remaining_questions.append(q)
+        
+    # Grab the next question if there are any left
+    if len(st.session_state.remaining_questions) > 0:
+        st.session_state.current_question_data = st.session_state.remaining_questions.pop(0)
+        initialize_options()
+    else:
+        st.session_state.current_question_data = None # None left, quiz over
+        
+    st.session_state.answered = False
+    st.session_state.user_selection = None
+    st.session_state.form_key_counter += 1 # Update form key to reset radio buttons cleanly
 
 # --- UI Layout ---
 st.title("🚗 Learner Licence Flashcards")
-st.write("Let's review the questions you missed!")
+st.write("Let's review the questions you missed! Incorrect answers will cycle back until you master them all.")
 st.divider()
 
-if st.session_state.current_q < len(st.session_state.shuffled_questions):
-    q = st.session_state.shuffled_questions[st.session_state.current_q]
+if st.session_state.current_question_data is not None:
+    q = st.session_state.current_question_data
     
-    # Progress and Question
-    st.caption(f"Question {st.session_state.current_q + 1} of {len(st.session_state.shuffled_questions)}")
+    # Progress Header
+    st.caption(f"Mastered: {st.session_state.mastered} / {TOTAL_QUESTIONS}  |  Total Attempts: {st.session_state.attempts}")
     st.subheader(q['question'])
     
-    # --- Image Handling Logic (Robust Pathing) ---
+    # --- Image Handling Logic ---
     if "image" in q:
         try:
             # Get the absolute path to the directory where this script lives
@@ -198,7 +206,7 @@ if st.session_state.current_q < len(st.session_state.shuffled_questions):
         current_index = st.session_state.shuffled_options.index(st.session_state.user_selection)
     
     # Form to handle selection
-    with st.form(key=f"form_{st.session_state.current_q}"):
+    with st.form(key=f"form_{st.session_state.form_key_counter}"):
         selected = st.radio(
             "Select your answer:", 
             st.session_state.shuffled_options, 
@@ -215,8 +223,7 @@ if st.session_state.current_q < len(st.session_state.shuffled_questions):
                 else:
                     st.session_state.answered = True
                     st.session_state.user_selection = selected
-                    if selected == q['answer']:
-                        st.session_state.score += 1
+                    st.session_state.attempts += 1
                     st.rerun()
         else:
             st.form_submit_button("Check Answer", disabled=True)
@@ -226,7 +233,7 @@ if st.session_state.current_q < len(st.session_state.shuffled_questions):
         if st.session_state.user_selection == q['answer']:
             st.success("Correct! 🎉")
         else:
-            st.error(f"Incorrect.\n\nYou selected: **{st.session_state.user_selection}**\nThe correct answer is: **{q['answer']}**")
+            st.error(f"Incorrect.\n\nYou selected: **{st.session_state.user_selection}**\nThe correct answer is: **{q['answer']}**\n\n*This question will cycle back later.*")
             
         st.button("Next Question ➔", on_click=next_question, type="primary")
 
@@ -234,13 +241,18 @@ else:
     # End of Quiz Screen
     st.balloons()
     st.header("Quiz Complete! 🏁")
-    st.subheader(f"Your Score: {st.session_state.score} / {len(st.session_state.shuffled_questions)}")
+    st.subheader(f"You mastered all {TOTAL_QUESTIONS} questions!")
     
-    if st.session_state.score == len(st.session_state.shuffled_questions):
-        st.success("Perfect score! You're ready for the test.")
-    elif st.session_state.score >= len(st.session_state.shuffled_questions) * 0.8:
-        st.info("Great job! Just a little more review needed.")
+    accuracy = round((TOTAL_QUESTIONS / st.session_state.attempts) * 100) if st.session_state.attempts > 0 else 0
+    
+    st.write(f"**Total Attempts:** {st.session_state.attempts}")
+    st.write(f"**Overall Accuracy:** {accuracy}%")
+    
+    if accuracy == 100:
+        st.success("Flawless victory! You're completely ready for the test.")
+    elif accuracy >= 80:
+        st.info("Great job! You retained almost everything.")
     else:
-        st.warning("Keep practicing, you'll get it next time!")
+        st.warning("Way to stick with it! The repetition will ensure you're ready.")
         
     st.button("Restart Quiz 🔄", on_click=restart_quiz, type="primary")
