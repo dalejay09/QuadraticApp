@@ -4,8 +4,8 @@ import random
 # Page configuration
 st.set_page_config(page_title="Driving Test Flashcards", page_icon="🚗")
 
-# Define all 16 unique questions extracted from the driving test screenshots
-# Each dictionary includes the question, the correct answer, and the user's previous incorrect answer (plus some added distractors for variety).
+# The 16 unique questions from the driving test screenshots
+# Added "image" key to the questions that rely on visual diagrams
 questions = [
     {
         "question": "If you have a learner licence can you carry passengers?",
@@ -17,7 +17,8 @@ questions = [
         "answer": "Yes, provided your supervisor agrees and is sitting in the front passenger seat"
     },
     {
-        "question": "Does the driver of the blue car have to give way? (Assume you are driving straight on the main road and a red car is turning out of a side street)",
+        "question": "Does the driver of the blue car have to give way?",
+        "image": "intersection_q28.jpg", # Replace with your actual filename
         "options": ["Yes", "No"],
         "answer": "No"
     },
@@ -36,7 +37,8 @@ questions = [
         "answer": "Where you can see all vehicles coming from all directions"
     },
     {
-        "question": "You are the driver of the blue car. Who must you give way to? (Turning right at a crossroad facing a Stop sign)",
+        "question": "You are the driver of the blue car. Who must you give way to?",
+        "image": "intersection_q9.jpg", # Replace with your actual filename
         "options": ["Car C only", "Car A only", "Cars A and C"],
         "answer": "Cars A and C"
     },
@@ -99,7 +101,8 @@ questions = [
         "answer": "Stop and check to see if anyone is injured"
     },
     {
-        "question": "What do flush median road markings (white diagonal lines in the center of the road) mean?",
+        "question": "What do these road markings mean?",
+        "image": "road_markings_q1.jpg", # Replace with your actual filename
         "options": [
             "You should only enter the turning lane at the arrow",
             "Drive straight over all road markings and wait to turn right",
@@ -134,9 +137,9 @@ if 'current_q' not in st.session_state:
     st.session_state.score = 0
     st.session_state.answered = False
     st.session_state.shuffled_options = []
+    st.session_state.user_selection = None
 
 def initialize_options():
-    """Shuffles the options for the current question so they aren't always in the same order."""
     opts = questions[st.session_state.current_q]['options'].copy()
     random.shuffle(opts)
     st.session_state.shuffled_options = opts
@@ -144,14 +147,10 @@ def initialize_options():
 if not st.session_state.shuffled_options and st.session_state.current_q < len(questions):
     initialize_options()
 
-def check_answer(selected_option, correct_answer):
-    st.session_state.answered = True
-    if selected_option == correct_answer:
-        st.session_state.score += 1
-
 def next_question():
     st.session_state.current_q += 1
     st.session_state.answered = False
+    st.session_state.user_selection = None
     if st.session_state.current_q < len(questions):
         initialize_options()
 
@@ -159,6 +158,7 @@ def restart_quiz():
     st.session_state.current_q = 0
     st.session_state.score = 0
     st.session_state.answered = False
+    st.session_state.user_selection = None
     initialize_options()
 
 # --- UI Layout ---
@@ -173,12 +173,25 @@ if st.session_state.current_q < len(questions):
     st.caption(f"Question {st.session_state.current_q + 1} of {len(questions)}")
     st.subheader(q['question'])
     
+    # --- Image Handling Logic ---
+    # Display an image if the current question dictionary has an 'image' key
+    if "image" in q:
+        try:
+            st.image(q["image"], use_column_width=False)
+        except Exception as e:
+            st.warning(f"⚠️ Could not load image '{q['image']}'. Make sure the file is in the correct folder.")
+    
+    # Keep the selected option highlighted even after the form submits
+    current_index = None
+    if st.session_state.user_selection in st.session_state.shuffled_options:
+        current_index = st.session_state.shuffled_options.index(st.session_state.user_selection)
+    
     # Form to handle selection
     with st.form(key=f"form_{st.session_state.current_q}"):
         selected = st.radio(
             "Select your answer:", 
             st.session_state.shuffled_options, 
-            index=None,
+            index=current_index,
             disabled=st.session_state.answered
         )
         
@@ -189,18 +202,20 @@ if st.session_state.current_q < len(questions):
                 if selected is None:
                     st.warning("Please select an answer first!")
                 else:
-                    check_answer(selected, q['answer'])
+                    st.session_state.answered = True
+                    st.session_state.user_selection = selected
+                    if selected == q['answer']:
+                        st.session_state.score += 1
                     st.rerun()
         else:
-            # We must provide a disabled button to maintain form structure if we already answered
             st.form_submit_button("Check Answer", disabled=True)
 
     # Feedback and Next Button outside the form
     if st.session_state.answered:
-        if selected == q['answer']:
+        if st.session_state.user_selection == q['answer']:
             st.success("Correct! 🎉")
         else:
-            st.error(f"Incorrect. \n\nThe correct answer is: **{q['answer']}**")
+            st.error(f"Incorrect.\n\nYou selected: **{st.session_state.user_selection}**\nThe correct answer is: **{q['answer']}**")
             
         st.button("Next Question ➔", on_click=next_question, type="primary")
 
