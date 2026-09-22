@@ -1,11 +1,11 @@
 import streamlit as st
 import random
+import os
 
 # Page configuration
 st.set_page_config(page_title="Driving Test Flashcards", page_icon="🚗")
 
 # The 16 unique questions from the driving test screenshots
-# Added "image" key to the questions that rely on visual diagrams
 questions = [
     {
         "question": "If you have a learner licence can you carry passengers?",
@@ -18,7 +18,7 @@ questions = [
     },
     {
         "question": "Does the driver of the blue car have to give way?",
-        "image": "intersection_q28.jpg", # Replace with your actual filename
+        "image": "intersection_q28.jpg",
         "options": ["Yes", "No"],
         "answer": "No"
     },
@@ -38,7 +38,7 @@ questions = [
     },
     {
         "question": "You are the driver of the blue car. Who must you give way to?",
-        "image": "intersection_q9.jpg", # Replace with your actual filename
+        "image": "intersection_q9.jpg",
         "options": ["Car C only", "Car A only", "Cars A and C"],
         "answer": "Cars A and C"
     },
@@ -102,7 +102,7 @@ questions = [
     },
     {
         "question": "What do these road markings mean?",
-        "image": "road_markings_q1.jpg", # Replace with your actual filename
+        "image": "road_markings_q1.jpg",
         "options": [
             "You should only enter the turning lane at the arrow",
             "Drive straight over all road markings and wait to turn right",
@@ -132,7 +132,12 @@ questions = [
 ]
 
 # Initialize Session State
-if 'current_q' not in st.session_state:
+if 'shuffled_questions' not in st.session_state:
+    # Shuffle the questions once per session
+    shuffled_qs = questions.copy()
+    random.shuffle(shuffled_qs)
+    st.session_state.shuffled_questions = shuffled_qs
+    
     st.session_state.current_q = 0
     st.session_state.score = 0
     st.session_state.answered = False
@@ -140,21 +145,25 @@ if 'current_q' not in st.session_state:
     st.session_state.user_selection = None
 
 def initialize_options():
-    opts = questions[st.session_state.current_q]['options'].copy()
+    opts = st.session_state.shuffled_questions[st.session_state.current_q]['options'].copy()
     random.shuffle(opts)
     st.session_state.shuffled_options = opts
 
-if not st.session_state.shuffled_options and st.session_state.current_q < len(questions):
+if not st.session_state.shuffled_options and st.session_state.current_q < len(st.session_state.shuffled_questions):
     initialize_options()
 
 def next_question():
     st.session_state.current_q += 1
     st.session_state.answered = False
     st.session_state.user_selection = None
-    if st.session_state.current_q < len(questions):
+    if st.session_state.current_q < len(st.session_state.shuffled_questions):
         initialize_options()
 
 def restart_quiz():
+    shuffled_qs = questions.copy()
+    random.shuffle(shuffled_qs)
+    st.session_state.shuffled_questions = shuffled_qs
+    
     st.session_state.current_q = 0
     st.session_state.score = 0
     st.session_state.answered = False
@@ -166,20 +175,22 @@ st.title("🚗 Learner Licence Flashcards")
 st.write("Let's review the questions you missed!")
 st.divider()
 
-if st.session_state.current_q < len(questions):
-    q = questions[st.session_state.current_q]
+if st.session_state.current_q < len(st.session_state.shuffled_questions):
+    q = st.session_state.shuffled_questions[st.session_state.current_q]
     
     # Progress and Question
-    st.caption(f"Question {st.session_state.current_q + 1} of {len(questions)}")
+    st.caption(f"Question {st.session_state.current_q + 1} of {len(st.session_state.shuffled_questions)}")
     st.subheader(q['question'])
     
-    # --- Image Handling Logic ---
-    # Display an image if the current question dictionary has an 'image' key
+    # --- Image Handling Logic (Robust Pathing) ---
     if "image" in q:
         try:
-            st.image(q["image"], use_column_width=False)
+            # Get the absolute path to the directory where this script lives
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            image_path = os.path.join(script_dir, q["image"])
+            st.image(image_path)
         except Exception as e:
-            st.warning(f"⚠️ Could not load image '{q['image']}'. Make sure the file is in the correct folder.")
+            st.warning(f"⚠️ Could not load image '{q['image']}'. Error details: {e}")
     
     # Keep the selected option highlighted even after the form submits
     current_index = None
@@ -223,11 +234,11 @@ else:
     # End of Quiz Screen
     st.balloons()
     st.header("Quiz Complete! 🏁")
-    st.subheader(f"Your Score: {st.session_state.score} / {len(questions)}")
+    st.subheader(f"Your Score: {st.session_state.score} / {len(st.session_state.shuffled_questions)}")
     
-    if st.session_state.score == len(questions):
+    if st.session_state.score == len(st.session_state.shuffled_questions):
         st.success("Perfect score! You're ready for the test.")
-    elif st.session_state.score >= len(questions) * 0.8:
+    elif st.session_state.score >= len(st.session_state.shuffled_questions) * 0.8:
         st.info("Great job! Just a little more review needed.")
     else:
         st.warning("Keep practicing, you'll get it next time!")
