@@ -138,9 +138,9 @@ def generate_linear_word_problem(level):
     
     prompt = (
         "Act as an NCEA Level 1 Mathematics assessment writer. "
-        "Generate a simultaneous equations word problem involving two unknown items (e.g., adult/child tickets, or apples/bananas prices) "
+        "Generate a simultaneous equations word problem involving two unknown items"
         "with a clear real-world context and two distinct linear constraints. "
-        "Output a JSON object containing: 1) problem_text: The problem statement text, 2) target_variable: The target unknown variable (e.g., 'cost of adult ticket')."
+        "Output a JSON object containing: 1) problem_text: The problem statement text, 2) target_variable: The target unknown variable."
     )
     
     try:
