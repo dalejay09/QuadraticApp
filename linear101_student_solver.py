@@ -59,7 +59,7 @@ def generate_linear_problem(level="1", include_tricks=False):
         if a1 == 0 and b1 == 0: a1 = 1
         c1 = random.randint(-10, 10)
         
-        mult = random.choice([-2, 2, 3])
+        mult = random.choice([-3, -2, 2, 3])
         a2 = a1 * mult
         b2 = b1 * mult
         
@@ -182,12 +182,19 @@ def generate_linear_word_problem(level, include_tricks=False):
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
     
     if include_tricks and random.choice([True, False]):
+        forced_trick = random.choice(["No Solution", "Infinite Solutions"])
+        
+        if forced_trick == "No Solution":
+            trick_desc = "parallel lines (no solution/impossible scenario, where equations contradict each other, e.g., 2x + y = 10 and 4x + 2y = 30)"
+        else:
+            trick_desc = "identical proportional lines (infinite solutions/redundant info, where the second equation is just a multiple of the first, e.g., 2x + y = 10 and 4x + 2y = 20)"
+            
         prompt = (
             "Act as an NCEA Level 1 Mathematics assessment writer. "
             "Generate a TRICK simultaneous equations word problem involving two items. "
-            "The two mathematical constraints provided MUST mathematically result in either parallel lines (no solution/impossible scenario) or identical proportional lines (infinite solutions/not enough info). "
+            f"The two mathematical constraints provided MUST mathematically result in {trick_desc}. "
             "Output a JSON object containing: 1) problem_text: The problem statement, 2) target_variable: What to find, "
-            "3) is_trick: true, 4) trick_type: 'No Solution' or 'Infinite Solutions'."
+            f"3) is_trick: true, 4) trick_type: '{forced_trick}'."
         )
     else:
         prompt = (
