@@ -48,12 +48,10 @@ class WordProblemOutput(BaseModel):
 # --- Math Engine: LINEAR ALGEBRA & SIMULTANEOUS EQUATIONS ---
 def generate_linear_problem(level="1"):
     if level == "1":
-        # Level 1: Clean, smaller positive/negative integer solutions
         ans_x = random.randint(-3, 5)
         ans_y = random.randint(-3, 5)
         method = random.choice(["Elimination", "Substitution"])
     else:
-        # Level 2: Wider coordinate ranges, larger coefficients
         ans_x = random.randint(-6, 8)
         ans_y = random.randint(-6, 8)
         method = random.choice(["Elimination", "Substitution"])
@@ -92,8 +90,8 @@ def build_linear_equations(problem_data):
 
 # --- Visual Engine: CARTESIAN GRID MATPLOTLIB GENERATOR ---
 def draw_cartesian_grid(problem_data, size_px=380):
-    fig, ax = plt.subplots(figsize=(size_px/100, (size_px * 1.5)/100), dpi=100)
-    fig.subplots_adjust(left=0.1, right=0.9, top=0.92, bottom=0.08)
+    fig, ax = plt.subplots(figsize=(size_px/100, (size_px * 2)/100), dpi=100)
+    fig.subplots_adjust(left=0.12, right=0.88, top=0.92, bottom=0.38)
     
     a1, b1, c1 = problem_data["a1"], problem_data["b1"], problem_data["c1"]
     a2, b2, c2 = problem_data["a2"], problem_data["b2"], problem_data["c2"]
@@ -105,6 +103,8 @@ def draw_cartesian_grid(problem_data, size_px=380):
     ax.axhline(0, color='black', linewidth=1)
     ax.axvline(0, color='black', linewidth=1)
     ax.grid(True, linestyle='--', alpha=0.5)
+    
+    ax.set_aspect('equal', adjustable='box')
     
     x_vals = np.linspace(-lim, lim, 100)
     
@@ -123,7 +123,7 @@ def draw_cartesian_grid(problem_data, size_px=380):
         ax.axvline(x_val, label=f"{problem_data['eq2']}", color='#FF2400', linewidth=2)
         
     ax.legend(loc='upper right', fontsize=8)
-    ax.set_title("Simultaneous Linear Equations", fontsize=10, fontweight='bold')
+    ax.set_title("Simultaneous Linear Equations", fontsize=10, fontweight='bold', pad=10)
 
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, facecolor='white', transparent=False)
