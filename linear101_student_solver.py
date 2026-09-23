@@ -47,20 +47,24 @@ class WordProblemOutput(BaseModel):
 
 # --- Math Engine: LINEAR ALGEBRA & SIMULTANEOUS EQUATIONS ---
 def generate_linear_problem(level="1"):
-    # Generate clean integer solutions for x and y (-6 to 8)
-    ans_x = random.randint(-4, 6)
-    ans_y = random.randint(-4, 6)
+    if level == "1":
+        # Level 1: Clean, smaller positive/negative integer solutions
+        ans_x = random.randint(-3, 5)
+        ans_y = random.randint(-3, 5)
+        method = random.choice(["Elimination", "Substitution"])
+    else:
+        # Level 2: Wider coordinate ranges, larger coefficients
+        ans_x = random.randint(-6, 8)
+        ans_y = random.randint(-6, 8)
+        method = random.choice(["Elimination", "Substitution"])
     
-    # Coefficients for Equation 1: a1*x + b1*y = c1
     a1 = random.choice([-3, -2, 1, 2, 3, 4])
-    b1 = random.choice([-3, -2, 1, 2, 3])
+    b1 = random.choice([-2, -1, 1, 2, 3])
     if a1 == 0 and b1 == 0: a1 = 1
     c1 = a1 * ans_x + b1 * ans_y
     
-    # Coefficients for Equation 2: a2*x + b2*y = c2 (ensure linearly independent)
     a2 = random.choice([-4, -2, 1, 2, 3])
-    b2 = random.choice([-2, -1, 1, 2, 3, 5])
-    # Prevent identical or parallel lines
+    b2 = random.choice([-2, -1, 1, 2, 3])
     if a1 * b2 == b1 * a2:
         b2 += 1
     c2 = a2 * ans_x + b2 * ans_y
@@ -72,7 +76,8 @@ def generate_linear_problem(level="1"):
         "a1": a1, "b1": b1, "c1": c1,
         "a2": a2, "b2": b2, "c2": c2,
         "ans_x": ans_x, "ans_y": ans_y,
-        "eq1": eq1_str, "eq2": eq2_str
+        "eq1": eq1_str, "eq2": eq2_str,
+        "method": method
     }
     
     return problem_data
@@ -81,23 +86,19 @@ def generate_linear_problem(level="1"):
 def build_linear_equations(problem_data):
     ans_x, ans_y = problem_data["ans_x"], problem_data["ans_y"]
     correct = f"x = {ans_x}, y = {ans_y}"
-    
-    # Generate plausible distractors
     dist1 = f"x = {ans_y}, y = {ans_x}"
     dist2 = f"x = {-ans_x}, y = {-ans_y}"
-    
     return correct, dist1, dist2
 
 # --- Visual Engine: CARTESIAN GRID MATPLOTLIB GENERATOR ---
 def draw_cartesian_grid(problem_data, size_px=380):
-    fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
-    fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+    fig, ax = plt.subplots(figsize=(size_px/100, (size_px * 1.5)/100), dpi=100)
+    fig.subplots_adjust(left=0.1, right=0.9, top=0.92, bottom=0.08)
     
     a1, b1, c1 = problem_data["a1"], problem_data["b1"], problem_data["c1"]
     a2, b2, c2 = problem_data["a2"], problem_data["b2"], problem_data["c2"]
     ans_x, ans_y = problem_data["ans_x"], problem_data["ans_y"]
     
-    # Set grid bounds around the intersection point
     lim = max(8, abs(ans_x) + 5, abs(ans_y) + 5)
     ax.set_xlim(-lim, lim)
     ax.set_ylim(-lim, lim)
@@ -107,7 +108,6 @@ def draw_cartesian_grid(problem_data, size_px=380):
     
     x_vals = np.linspace(-lim, lim, 100)
     
-    # Plot Line 1
     if b1 != 0:
         y1_vals = (c1 - a1 * x_vals) / b1
         ax.plot(x_vals, y1_vals, label=f"{problem_data['eq1']}", color='#1E90FF', linewidth=2)
@@ -115,7 +115,6 @@ def draw_cartesian_grid(problem_data, size_px=380):
         x_val = c1 / a1
         ax.axvline(x_val, label=f"{problem_data['eq1']}", color='#1E90FF', linewidth=2)
         
-    # Plot Line 2
     if b2 != 0:
         y2_vals = (c2 - a2 * x_vals) / b2
         ax.plot(x_vals, y2_vals, label=f"{problem_data['eq2']}", color='#FF2400', linewidth=2)
@@ -183,7 +182,7 @@ def create_pdf_bytes(level):
             ai_steps = {}
             try:
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                payload = "".join([f"Q{i+1}: 1) {p['eq1']} 2) {p['eq2']} | Ans: x={p['ans_x']}, y={p['ans_y']}\n" for i, p in enumerate(problems)])
+                payload = "".join([f"Q{i+1}: 1) {p['eq1']} 2) {p['eq2']} | Method: {p['method']} | Ans: x={p['ans_x']}, y={p['ans_y']}\n" for i, p in enumerate(problems)])
                 prompt = (
                     "Write concise step-by-step simultaneous equation solutions using valid LaTeX math expressions enclosed in single dollar signs. "
                     "Use \\n to separate steps so they break into new lines cleanly. "
@@ -207,9 +206,9 @@ def create_pdf_bytes(level):
                 row, col = divmod(idx, 4)
                 ax = axes[row, col]
                 ax.axis('off')
-                ax.text(0.05, 0.8, f"Q{idx+1}", fontsize=10, fontweight='bold')
-                ax.text(0.05, 0.5, f"1) ${p_data['eq1']}$", fontsize=10)
-                ax.text(0.05, 0.3, f"2) ${p_data['eq2']}$", fontsize=10)
+                ax.text(0.05, 0.85, f"Q{idx+1} ({p_data['method']})", fontsize=9, fontweight='bold')
+                ax.text(0.05, 0.55, f"1) ${p_data['eq1']}$", fontsize=9)
+                ax.text(0.05, 0.35, f"2) ${p_data['eq2']}$", fontsize=9)
                 
             pdf.savefig(fig_ws); plt.close(fig_ws)
 
@@ -218,8 +217,8 @@ def create_pdf_bytes(level):
             ax_ans.text(0.5, 0.96, "Answer Key & Steps", fontsize=16, fontweight='bold', ha='center')
             for i in range(10):
                 left_idx, right_idx = i, i + 10
-                txt_l = f"Q{left_idx+1}: x={problems[left_idx]['ans_x']}, y={problems[left_idx]['ans_y']}\n{ai_steps.get(left_idx+1, '')}"
-                txt_r = f"Q{right_idx+1}: x={problems[right_idx]['ans_x']}, y={problems[right_idx]['ans_y']}\n{ai_steps.get(right_idx+1, '')}"
+                txt_l = f"Q{left_idx+1} ({problems[left_idx]['method']}): x={problems[left_idx]['ans_x']}, y={problems[left_idx]['ans_y']}\n{ai_steps.get(left_idx+1, '')}"
+                txt_r = f"Q{right_idx+1} ({problems[right_idx]['method']}): x={problems[right_idx]['ans_x']}, y={problems[right_idx]['ans_y']}\n{ai_steps.get(right_idx+1, '')}"
                 y_pos = 0.90 - (i * 0.088)
                 ax_ans.text(0.04, y_pos, txt_l, fontsize=7.0, va='top', wrap=True)
                 ax_ans.text(0.52, y_pos, txt_r, fontsize=7.0, va='top', wrap=True)
@@ -301,7 +300,7 @@ else:
     
     if st.session_state.question_type == "Graphical":
         p_data = st.session_state.linear_problem_data
-        st.write(f"**Solve the simultaneous equations:**")
+        st.write(f"**Solve using {p_data['method']}:**")
         st.latex(f"1)\\ {p_data['eq1']}")
         st.latex(f"2)\\ {p_data['eq2']}")
         target_desc = f"x = {p_data['ans_x']}, y = {p_data['ans_y']}"
@@ -341,10 +340,10 @@ else:
                 else: st.warning(f"🤖 {f_msg}")
             
     else:
-        canvas_height = 380 if st.session_state.question_type == "Graphical" else 760
+        canvas_height = 760
         
         if st.session_state.question_type == "Graphical":
-            problem_context = f"This is a simultaneous linear equations problem. Equation 1: {p_data['eq1']}, Equation 2: {p_data['eq2']}. The correct solution point is x = {p_data['ans_x']}, y = {p_data['ans_y']}."
+            problem_context = f"This is a simultaneous linear equations problem requiring the student to use the {p_data['method']} method. Equation 1: {p_data['eq1']}, Equation 2: {p_data['eq2']}. The correct solution point is x = {p_data['ans_x']}, y = {p_data['ans_y']}. The student MUST demonstrate workings using {p_data['method']}."
         else:
             problem_context = f"This is a linear algebra word problem. Target variable: {target_desc}."
 
