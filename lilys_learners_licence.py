@@ -171,6 +171,41 @@ questions = [
         "image": "batch2_lanes.jpg",
         "options": ["A", "Either A or B", "B"],
         "answer": "B"
+    },
+    {
+        "question": "What is the minimum tread depth required for car tyres?",
+        "options": ["1.0 mm", "1.5 mm", "2.0 mm", "3.0 mm"],
+        "answer": "1.5 mm"
+    },
+    {
+        "question": "How close may you park your vehicle to an intersection where no broken yellow lines have been marked?",
+        "options": ["4 metres", "5 metres", "6 metres", "10 metres"],
+        "answer": "6 metres"
+    },
+    {
+        "question": "Which parts of the car must be in good condition to prevent too much noise and gases entering the car?",
+        "options": ["The air conditioning and cabin filter", "The radiator and water pump", "The engine, exhaust system and silencer", "The fuel tank and injectors"],
+        "answer": "The engine, exhaust system and silencer"
+    },
+    {
+        "question": "Under normal driving conditions, what rule should you use to allow a safe following distance?",
+        "options": ["2 seconds", "3 seconds", "4 seconds", "10 metres"],
+        "answer": "2 seconds"
+    },
+    {
+        "question": "What is the maximum speed you may drive if you have a 'space saver wheel' fitted?",
+        "options": ["50 km/h", "70 km/h", "80 km/h. If the space-saver wheel displays a lower speed, then that speed applies", "100 km/h"],
+        "answer": "80 km/h. If the space-saver wheel displays a lower speed, then that speed applies"
+    },
+    {
+        "question": "On a transit lane what does T2 mean?",
+        "options": ["Only vehicles with 2 or more people may use this lane", "Vehicles with 2 or more people, buses, bicycles and motorcycles may use this lane", "Heavy vehicles with 2 axles only", "2-hour parking limit applies"],
+        "answer": "Vehicles with 2 or more people, buses, bicycles and motorcycles may use this lane"
+    },
+    {
+        "question": "What does a blue reflector (cat's eye) placed on the road mean?",
+        "options": ["The centre of the road", "Left edge of the road", "Fire hydrant", "No passing allowed"],
+        "answer": "Fire hydrant"
     }
 ]
 
