@@ -42,13 +42,30 @@ class AIWorksheetSolutions(BaseModel):
 
 # --- Math Engine: ALGEBRA FORMATTING HELPER ---
 def format_alg(expr):
-    """Cleans up raw algebraic strings (e.g., '+ -3' to '- 3', '1x' to 'x')"""
+    """Cleans up raw algebraic strings (e.g., '+ -3' to '- 3', removing 0x, '1x' to 'x')"""
+    # 1. Clean raw operator clashes
     expr = expr.replace("+ -", "- ").replace("- -", "+ ")
+    
+    # 2. Aggressively remove zero coefficients (e.g., + 0x, - 0x^2, + 0)
+    expr = re.sub(r'[+-]\s*0x\^2\b', '', expr)
+    expr = re.sub(r'\b0x\^2\b', '', expr)
+    expr = re.sub(r'[+-]\s*0x\b', '', expr)
+    expr = re.sub(r'\b0x\b', '', expr)
+    expr = re.sub(r'[+-]\s*0\b', '', expr)
+    
+    # 3. Clean up '1' coefficients
     expr = re.sub(r'\b1x\^2\b', 'x^2', expr)
     expr = re.sub(r'\b1x\b', 'x', expr)
     expr = re.sub(r'\b-1x\^2\b', '-x^2', expr)
     expr = re.sub(r'\b-1x\b', '-x', expr)
-    if expr.startswith("+ "): expr = expr[2:]
+    
+    # 4. Standardize any double spaces left behind by removed terms
+    expr = " ".join(expr.split())
+    
+    # 5. Clean dangling positive signs at the absolute start of expressions
+    if expr.startswith("+ "): 
+        expr = expr[2:]
+        
     return expr.strip()
 
 # --- Math Engine: CORE GENERATOR ---
