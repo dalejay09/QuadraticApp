@@ -12,11 +12,13 @@ def render_grading_suite(
     key_prefix="generic_marking", 
     show_experimental_toolbar=False,
     solution_requirement="demonstrated",
-    problem_context=""
+    problem_context="",
+    show_controls=True,
+    camera_mode="App"
 ):
     """
     Encapsulated logic for problem canvas, markup, Undo/Clear, Photo Snap, and AI Grading.
-    Accepts an optional problem_context string to provide ground-truth metadata to the AI marker.
+    Accepts optional toggles for UI elements (show_controls, camera_mode).
     """
     
     # --- Internal Key Encapsulation ---
@@ -50,7 +52,7 @@ def render_grading_suite(
     current_color_index = st.session_state.current_marking_color_index
     current_color_name = COLOR_NAMES[current_color_index]
     
-    current_tool = st.session_state.get(TOOL_SELECTOR_KEY, "🖌️")
+    current_tool = st.session_state.get(TOOL_SELECTOR_KEY, "🖌️") if show_controls else "🖌️"
     active_stroke_color = PEN_COLORS[current_color_index] if current_tool == "🖌️" else "#FFFFFE"
     active_stroke_width = 3 if current_tool == "🖌️" else 15
 
@@ -59,31 +61,39 @@ def render_grading_suite(
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", stroke_width=active_stroke_width, stroke_color=active_stroke_color,
         background_image=bg_image, update_streamlit=True, height=height_px, width=350,
-        drawing_mode="freedraw", return_image_data=True, initial_drawing=st.session_state.get(INITIAL_DWG_KEY, {"version": "4.4.0", "objects": []}), 
+        drawing_mode="freedraw", return_image_data=True, initial_drawing=st.session_state.get(INITIAL_DWG_KEY, {"version": "4.4.0", "objects": []}),
+        display_toolbar=show_controls, 
         key=k(f"canvas_{st.session_state.get(CANVAS_KEY, 0)}")
     )
 
-    st.write("---")
-    t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
-    with t_col1: st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key=TOOL_SELECTOR_KEY)
-    with t_col2:
-        if st.button("↩️", use_container_width=True, help="Undo", key=k("btn_undo")):
-            hist = st.session_state.get(STROKE_HIST_KEY, [[]])
-            if len(hist) > 1:
-                hist.pop()
-                st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": hist[-1]}
-                st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
-                st.rerun()
-    with t_col3:
-        if st.button("🗑️", use_container_width=True, help="Clear Workings", key=k("btn_clear")):
-            st.session_state[STROKE_HIST_KEY] = [[]]
-            st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": []}
-            st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
-            st.rerun()
-    with t_col4:
-        if st.button("📸 Paper", use_container_width=True, help="Snap photo of paper workings", key=k("btn_photo")):
-            st.session_state[CAMERA_STATE_KEY] = not st.session_state.get(CAMERA_STATE_KEY, False)
-            st.rerun()
+    # Conditionally render our custom UI button controls
+    if show_controls or camera_mode != "None":
+        st.write("---")
+        t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
+        
+        if show_controls:
+            with t_col1: 
+                st.radio("Tool", ["🖌️", "🧽"], horizontal=True, label_visibility="collapsed", key=TOOL_SELECTOR_KEY)
+            with t_col2:
+                if st.button("↩️", use_container_width=True, help="Undo", key=k("btn_undo")):
+                    hist = st.session_state.get(STROKE_HIST_KEY, [[]])
+                    if len(hist) > 1:
+                        hist.pop()
+                        st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": hist[-1]}
+                        st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
+                        st.rerun()
+            with t_col3:
+                if st.button("🗑️", use_container_width=True, help="Clear Workings", key=k("btn_clear")):
+                    st.session_state[STROKE_HIST_KEY] = [[]]
+                    st.session_state[INITIAL_DWG_KEY] = {"version": "4.4.0", "objects": []}
+                    st.session_state[CANVAS_KEY] = st.session_state.get(CANVAS_KEY, 0) + 1
+                    st.rerun()
+                    
+        if camera_mode != "None":
+            with t_col4:
+                if st.button("📸 Paper", use_container_width=True, help="Snap photo of paper workings", key=k("btn_photo")):
+                    st.session_state[CAMERA_STATE_KEY] = not st.session_state.get(CAMERA_STATE_KEY, False)
+                    st.rerun()
             
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
     stroke_hist = st.session_state.get(STROKE_HIST_KEY, [[]])
@@ -101,9 +111,11 @@ def render_grading_suite(
                 stroke_hist.append(current_objects.copy())
 
     camera_picture = None
-    if st.session_state.get(CAMERA_STATE_KEY, False):
-        cam_input_mode = st.session_state.get('camera_mode', 'App')
-        camera_picture = st.camera_input("Snap a photo:", key=k("cam_input")) if cam_input_mode == 'App' else st.file_uploader("Upload photo:", type=['png', 'jpg'], key=k("cam_input"))
+    if camera_mode != "None" and st.session_state.get(CAMERA_STATE_KEY, False):
+        if camera_mode == 'App':
+            camera_picture = st.camera_input("Snap a photo:", key=k("cam_input")) 
+        else:
+            camera_picture = st.file_uploader("Upload photo:", type=['png', 'jpg'], key=k("cam_input"))
 
     color_sequence_str = ", ".join(COLOR_NAMES)
     
@@ -142,7 +154,8 @@ def render_grading_suite(
             payload_images.append(Image.alpha_composite(bg_image.convert("RGBA"), ink).convert("RGB"))
         if camera_picture: payload_images.append(Image.open(camera_picture).convert('RGB').resize((1024, 1024)))
             
-        if not payload_images: st.error("Please draw your workings on the canvas or snap a photo first!")
+        if not payload_images: 
+            st.error("Please draw your workings on the canvas or snap a photo first!")
         else:
             with st.spinner("Reviewing your workings..."):
                 try:
