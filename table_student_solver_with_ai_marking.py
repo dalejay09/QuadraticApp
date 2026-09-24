@@ -257,6 +257,9 @@ if 'initialized_study_mode' not in st.session_state:
     
 if 'pdf_bytes' not in st.session_state:
     st.session_state.pdf_bytes = None
+    
+if 'show_controls' not in st.session_state:
+    st.session_state.show_controls = False
 
 def apply_study_mode():
     st.session_state.generating = True
@@ -285,18 +288,26 @@ if 'show_camera' not in st.session_state:
 
 st.title("Student Table Solver")
 
-# Custom CSS for friendly buttons
+# Custom CSS for friendly buttons and unified UI styling
 st.markdown("""
     <style>
-    div.stButton > button[kind="primary"] {
-        background-color: #1E90FF;
-        color: white;
-        border: none;
+    button[kind="primary"] { background-color: #007AFF !important; border-color: #007AFF !important; color: white !important; }
+    button[kind="primary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
+    
+    /* Target the exact 'Next Problem' button by stepping up to Streamlit's element container */
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
+        background-color: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
     }
-    div.stButton > button[kind="primary"]:hover {
-        background-color: #0073e6;
-        border: none;
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
+        background-color: #218838 !important;
+        border-color: #218838 !important;
     }
+    
+    .stRadio > div { gap: 0rem; }
+    [data-testid="stHorizontalBlock"] { gap: 0.5rem; align-items: center; }
+    div[data-testid="stToolbar"] { display: none; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -306,7 +317,8 @@ def render_settings_cog():
         st.toggle("Mark My Working", key="mark_working")
         st.toggle("Equation Buttons", key="show_equations", on_change=handle_settings_change)
         st.toggle("Include Shifted Exponential", key="include_shifted_exp", value=False, on_change=handle_settings_change)
-        st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
+        st.radio("Camera Mode", ["None", "App", "Native"], key="camera_mode", horizontal=True, on_change=handle_settings_change)
+        st.toggle("Canvas Controls", key="show_controls", value=False, on_change=handle_settings_change)
 
 # PDF Controls & Settings Layout
 if st.session_state.pdf_bytes is None:
@@ -374,6 +386,14 @@ else:
         return_image_data=True,
         key=f"canvas_{st.session_state.canvas_key}",
     )
+    
+    if st.session_state.get('show_controls', False):
+        st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+        t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
+        with t_col3:
+            if st.button("🗑️", use_container_width=True, help="Clear Workings"):
+                st.session_state.canvas_key += 1
+                st.rerun()
 
     # STAGE 1: Identifying Function Family
     if not st.session_state.identified_correctly:
@@ -411,6 +431,8 @@ else:
         
         if not st.session_state.get('mark_working', False):
             st.info(steps)
+            st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+            st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
             if st.button("Next Table", use_container_width=True):
                 st.session_state.generating = True
                 st.rerun()
@@ -420,6 +442,8 @@ else:
                 if st.session_state.ai_feedback:
                     st.success(f"🎉 **AI Marker:** {st.session_state.ai_feedback}")
                 st.info(steps)
+                st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+                st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
                 if st.button("Next Table", use_container_width=True):
                     st.session_state.generating = True
                     st.rerun()
@@ -439,7 +463,10 @@ else:
                             st.rerun()
                 else:
                     cam_mode = st.session_state.get('camera_mode', 'App')
-                    if cam_mode == 'App':
+                    paper_pic = None
+                    if cam_mode == 'None':
+                        st.info("📷 Camera is disabled in settings. Enable it to submit algebraic workings.")
+                    elif cam_mode == 'App':
                         paper_pic = st.camera_input("Snap a photo of your algebraic working:")
                     else:
                         paper_pic = st.file_uploader("Upload a photo of your working:", type=['png', 'jpg', 'jpeg'])
@@ -501,7 +528,7 @@ else:
                     if st.session_state.ai_feedback and not st.session_state.ai_is_correct:
                         st.warning(f"**AI Marker Feedback:**\n\n{st.session_state.ai_feedback}")
                         
-                    st.write("---")
+                    st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
                     col_retry, col_skip = st.columns(2)
                     with col_retry:
                         if st.button("Cancel Marker", use_container_width=True):

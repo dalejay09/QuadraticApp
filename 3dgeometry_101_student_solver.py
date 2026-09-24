@@ -28,6 +28,18 @@ st.markdown("""
     <style>
     button[kind="primary"] { background-color: #007AFF !important; border-color: #007AFF !important; color: white !important; }
     button[kind="primary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
+    
+    /* Target the exact 'Next Problem' button */
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
+        background-color: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
+        background-color: #218838 !important;
+        border-color: #218838 !important;
+    }
+    
     .stRadio > div { gap: 0rem; }
     [data-testid="stHorizontalBlock"] { gap: 0.5rem; align-items: center; }
     div[data-testid="stToolbar"] { display: none; }
@@ -46,7 +58,7 @@ class WordProblemOutput(BaseModel):
     problem_text: str = Field(description="The problem statement text")
     target_variable: str = Field(description="The target variable name")
 
-# --- Math Engine: 3D GEOMETRY (With Hollow Cavity Support) ---
+# --- Math Engine: 3D GEOMETRY ---
 def generate_geom_problem(target_metric="Volume", num_shapes=1):
     all_shapes_pool = ["Cylinder", "Cone", "Box", "Hemisphere", "Pyramid", "Triangular Prism"]
     if target_metric == "Surface Area":
@@ -59,13 +71,7 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
     
     if num_shapes == 2 and target_metric == "Volume" and random.choice([True, False]):
         is_hollow = True
-        hollow_pairs = [
-            ("Box", "Box"),               
-            ("Cylinder", "Cylinder"),     
-            ("Hemisphere", "Hemisphere"), 
-            ("Box", "Cylinder"),          
-            ("Box", "Hemisphere")         
-        ]
+        hollow_pairs = [("Box", "Box"), ("Cylinder", "Cylinder"), ("Hemisphere", "Hemisphere"), ("Box", "Cylinder"), ("Box", "Hemisphere")]
         outer_type, inner_type = random.choice(hollow_pairs)
         
         r_out = random.randint(6, 10)
@@ -100,7 +106,7 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
         elif inner_type == "Hemisphere":
             v_in = (2/3) * math.pi * (r_in**3)
             formula_parts.append(f"- \\frac{{2}}{{3}}\pi r^3_{{{inner_type}}}")
-            stack.append({"type": inner_type, "r": r_in, "h": r_in, "is_cavity": True})
+            stack.append({"type": inner_type, "r": r_in, "h": h_in, "is_cavity": True})
             
         total_val = v_out - v_in
         correct_formula_str = f"V = " + " ".join(formula_parts)
@@ -115,21 +121,15 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
         available_pool = [s for s in all_shapes_pool if s != previous_shape]
         if not available_pool: available_pool = all_shapes_pool
         
-        if is_top_layer:
-            shape = random.choice(available_pool)
+        if is_top_layer: shape = random.choice(available_pool)
         else:
             flat_pool = [s for s in ["Cylinder", "Box"] if s != previous_shape]
             if not flat_pool: flat_pool = ["Cylinder", "Box"]
             shape = random.choice(flat_pool)
             
-        if shape == "Hemisphere" and target_metric == "Surface Area": 
-            shape = "Cylinder"
+        if shape == "Hemisphere" and target_metric == "Surface Area": shape = "Cylinder"
             
-        if i > 0:
-            r = random.randint(max(3, current_r - 2), current_r)
-        else:
-            r = current_r
-            
+        r = random.randint(max(3, current_r - 2), current_r) if i > 0 else current_r
         current_r = r
         w = r * 2
         h = random.randint(4, 10)
@@ -140,7 +140,6 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
             formula_parts.append("\pi r^2 h" if target_metric == "Volume" else "(2\pi r^2 + 2\pi rh)")
             stack.append({"type": shape, "r": r, "h": h, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
-            
         elif shape == "Cone":
             v = (1/3) * math.pi * (r**2) * h
             s = math.hypot(r, h)
@@ -148,7 +147,6 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
             formula_parts.append("\\frac{1}{3}\pi r^2 h" if target_metric == "Volume" else "(\pi r^2 + \pi rs)")
             stack.append({"type": shape, "r": r, "h": h, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
-            
         elif shape == "Box":
             l = w
             v = l * w * h
@@ -156,14 +154,12 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
             formula_parts.append("lwh" if target_metric == "Volume" else "2(lw + lh + wh)")
             stack.append({"type": shape, "w": w, "l": l, "h": h, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
-            
         elif shape == "Hemisphere":
             v = (2/3) * math.pi * (r**3)
             sa = 3 * math.pi * (r**2)
             formula_parts.append("\\frac{2}{3}\pi r^3" if target_metric == "Volume" else "3\pi r^2")
             stack.append({"type": shape, "r": r, "h": r, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
-
         elif shape == "Pyramid":
             v = (1/3) * (w**2) * h
             s = math.hypot(w/2, h)
@@ -171,7 +167,6 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
             formula_parts.append("\\frac{1}{3}w^2 h" if target_metric == "Volume" else "(w^2 + 2ws)")
             stack.append({"type": shape, "w": w, "h": h, "is_cavity": False})
             total_val += v if target_metric == "Volume" else sa
-
         elif shape == "Triangular Prism":
             v = (1/2) * w * h * w
             s = math.hypot(w/2, h)
@@ -185,29 +180,23 @@ def generate_geom_problem(target_metric="Volume", num_shapes=1):
     correct_formula_str = f"{'V' if target_metric == 'Volume' else 'SA'} = " + " + ".join(formula_parts)
     target_var = "Volume" if target_metric == "Volume" else "Surface Area"
     ans = round(total_val, 1)
-    
     return stack, correct_formula_str, ans, target_var, target_metric
 
-# --- Equations Generator (Identification Distractors) ---
 def build_geom_equations(correct_formula, target_metric, num_shapes):
     distractor_pool_v = ["\pi r^2 h", "\\frac{1}{3}\pi r^2 h", "\\frac{4}{3}\pi r^3", "lwh", "\\frac{1}{3}w^2 h", "\\frac{1}{2}whl"]
     distractor_pool_sa = ["2\pi r^2 + 2\pi rh", "\pi r^2 + \pi rs", "4\pi r^2", "2(lw + lh + wh)"]
-    
     pool = distractor_pool_v if target_metric == "Volume" else distractor_pool_sa
     
     dist1_parts = [random.choice(pool) for _ in range(num_shapes)]
     dist2_parts = [random.choice(pool) for _ in range(num_shapes)]
-    
     prefix = 'V' if target_metric == 'Volume' else 'SA'
     d1 = f"{prefix} = " + " + ".join(dist1_parts)
     d2 = f"{prefix} = " + " + ".join(dist2_parts)
     
     if d1 == correct_formula: d1 = f"{prefix} = " + " + ".join([random.choice(pool)])
     if d2 == correct_formula or d2 == d1: d2 = f"{prefix} = " + " + ".join([random.choice(pool)])
-        
     return correct_formula, d1, d2
 
-# --- Visual Engine: 3D STACKED MATPLOTLIB GENERATOR (Corrected Cavity Depths) ---
 def draw_geometry_image(stack, size_px=380):
     fig = plt.figure(figsize=(size_px/100, size_px/100), dpi=100)
     ax = fig.add_subplot(111, projection='3d')
@@ -221,12 +210,8 @@ def draw_geometry_image(stack, size_px=380):
         shape = obj['type']
         h = obj['h']
         is_cav = obj.get('is_cavity', False)
-        
-        if is_cav:
-            base_z = outer_top_z - h
-        else:
-            base_z = current_z
-            outer_top_z = current_z + h
+        base_z = outer_top_z - h if is_cav else current_z
+        if not is_cav: outer_top_z = current_z + h
 
         if shape in ["Cylinder", "Cone", "Hemisphere"]:
             r = obj['r']
@@ -249,72 +234,33 @@ def draw_geometry_image(stack, size_px=380):
                 Y = r * np.sin(Phi) * np.sin(Theta)
                 Z = base_z + r * np.cos(Phi)
                 
-            ls = '--' if is_cav else '-'
-            alpha_val = 0.3 if is_cav else 0.5
-            ax.plot_wireframe(X, Y, Z, color='blue' if is_cav else 'black', linewidth=0.5, linestyle=ls, alpha=alpha_val)
-            
-            if not is_cav:
-                if shape == "Cylinder":
-                    ax.text(0, r*1.2, base_z + h/2, f"h={h}", color='red', fontsize=10)
-                    ax.text(r/2, 0, base_z, f"r={r}", color='blue', fontsize=10)
-                elif shape == "Hemisphere":
-                    ax.text(0, r*1.2, base_z + r/2, f"r={r}", color='blue', fontsize=10)
-            else:
-                ax.text(0, 0, base_z + h/2, f"Hole h={h}, r={r}", color='purple', fontsize=8)
-                
+            ax.plot_wireframe(X, Y, Z, color='blue' if is_cav else 'black', linewidth=0.5, linestyle='--' if is_cav else '-', alpha=0.3 if is_cav else 0.5)
         elif shape == "Box":
             w, l = obj['w'], obj['l']
             max_w = max(max_w, w, l)
             xx, yy = np.meshgrid([-w/2, w/2], [-l/2, l/2])
-            
-            ls = '--' if is_cav else '-'
             edge_col = 'blue' if is_cav else 'black'
-            
+            ls = '--' if is_cav else '-'
             ax.plot_surface(xx, yy, np.full_like(xx, base_z), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
             ax.plot_surface(xx, yy, np.full_like(xx, base_z + h), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
             for x_edge in [-w/2, w/2]:
                 ax.plot_surface(np.full_like(xx, x_edge), yy, np.array([[base_z, base_z], [base_z+h, base_z+h]]), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
             for y_edge in [-l/2, l/2]:
                 ax.plot_surface(xx, np.full_like(yy, y_edge), np.array([[base_z, base_z], [base_z+h, base_z+h]]), color='gray', alpha=0.1, edgecolor=edge_col, linestyle=ls)
-                
-            if not is_cav:
-                ax.text(-w/2, -l/2 - 2, base_z, f"w={w}", color='blue', fontsize=10)
-                ax.text(w/2 + 2, 0, base_z, f"l={l}", color='green', fontsize=10)
-                ax.text(-w/2 - 2, -l/2, base_z + h/2, f"h={h}", color='red', fontsize=10)
-            else:
-                ax.text(0, 0, base_z + h/2, f"Hole h={h}, w={w}", color='purple', fontsize=8)
 
-        if not is_cav:
-            current_z += h
+        if not is_cav: current_z += h
 
     ax.set_box_aspect([1, 1, current_z/max_w if max_w > 0 else 1]) 
-
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, facecolor='white', transparent=False)
     plt.close(fig)
     buf.seek(0)
     return Image.open(buf).convert('RGBA').copy()
 
-# --- Word Problem Engine ---
 def generate_geom_word_problem(level, target_metric, num_shapes):
     from google import genai
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-    
-    if level == "1":
-        prompt_choices = [
-            f"Act as an NCEA Level 1 Mathematics assessment writer. Generate a single 3D shape word problem calculating the {target_metric} of a real-world object (e.g., a silo, an ice cream cone, a swimming pool, or a basketball). Give clear dimensions.",
-            f"Act as an NCEA Level 1 Mathematics assessment writer. Generate a word problem where the student must calculate the capacity in Litres of a single {target_metric} shape (remembering 1 cubic meter = 1000 Litres)."
-        ]
-    else:
-        prompt_choices = [
-            f"Act as an NCEA Level 1 Mathematics Excellence assessment writer. Generate a word problem where the {target_metric} is KNOWN, and the student must algebraically work backwards to find a missing height or radius.",
-            f"Act as an NCEA Level 1 Mathematics Merit assessment writer. Generate a composite 3D shape word problem (combining a cylinder and a cone, or a box and a pyramid) calculating the {target_metric}. Provide context like a house roof or a rocket.",
-            f"Act as an NCEA Level 1 Mathematics Excellence assessment writer. Generate a complex {target_metric} word problem requiring a subtraction (e.g., the volume of a pipe with a hollow center, or painting the outside of a shed but NOT the floor)."
-        ]
-        
-    prompt = random.choice(prompt_choices)
-    prompt += " Output a JSON object containing: 1) problem_text: The word problem text, 2) target_variable: The target unknown variable (e.g., 'Total Volume', 'Missing Height')."
-    
+    prompt = f"Act as an NCEA Level 1 Mathematics assessment writer. Generate a 3D shape word problem calculating the {target_metric}. Output a JSON object containing: 1) problem_text: The problem statement text, 2) target_variable: The target variable name."
     try:
         response = client.models.generate_content(
             model='gemini-3.6-flash',
@@ -323,28 +269,19 @@ def generate_geom_word_problem(level, target_metric, num_shapes):
         )
         return json.loads(response.text)
     except Exception:
-        return {
-            "problem_text": "A cylindrical water tank has a radius of 4m and a height of 10m. Calculate its total Volume.",
-            "target_variable": "Volume"
-        }
+        return {"problem_text": "A cylindrical water tank has a radius of 4m and a height of 10m. Calculate its total Volume.", "target_variable": "Volume"}
 
 def draw_word_problem_image(text, width_px=380, height_px=760):
     fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100)
     fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis('off')
-    
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.axis('off')
     wrapped_text = "\n".join(textwrap.wrap(text, width=42))
     ax.text(0.02, 0.98, wrapped_text, fontsize=12, ha='left', va='top', wrap=True, family='sans-serif', color='black')
-    
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, facecolor='white', transparent=False)
-    plt.close(fig)
-    buf.seek(0)
+    plt.close(fig); buf.seek(0)
     return Image.open(buf).convert('RGBA').copy()
 
-# --- Worksheet PDF Generator ---
 def create_pdf_bytes(target_metric, num_shapes):
     from google import genai
     buffer = io.BytesIO()
@@ -355,33 +292,25 @@ def create_pdf_bytes(target_metric, num_shapes):
             try:
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                 payload = "".join([f"Q{i+1}: Shapes: {[s['type'] for s in p[0]]} | Ans: {p[2]}\n" for i, p in enumerate(problems)])
-                prompt = (
-                    "Write concise step-by-step solutions using valid LaTeX math expressions enclosed in single dollar signs. "
-                    "Use \\n to separate steps so they break into new lines cleanly. "
-                    "Data:\n" + payload
-                )
+                prompt = "Write concise step-by-step solutions using valid LaTeX math expressions enclosed in single dollar signs. Data:\n" + payload
                 response = client.models.generate_content(
                     model='gemini-3.6-flash', contents=[prompt],
                     config=dict(response_mime_type="application/json", response_schema=AIWorksheetSolutions, temperature=0.1)
                 )
                 for item in json.loads(response.text).get("solutions", []):
-                    cleaned_step = item["steps"].replace("**", "").replace(r"\n", "\n")
-                    ai_steps[item["q_num"]] = cleaned_step
+                    ai_steps[item["q_num"]] = item["steps"].replace("**", "").replace(r"\n", "\n")
             except Exception:
                 pass
             
             fig_ws, axes = plt.subplots(5, 4, figsize=(8.27, 11.69))
             fig_ws.subplots_adjust(left=0.03, right=0.97, top=0.92, bottom=0.03, wspace=0.10, hspace=0.20)
             fig_ws.suptitle("Geometry 101 Worksheet", fontsize=16, fontweight='bold', ha='center')
-            
             for idx, p_data in enumerate(problems):
                 row, col = divmod(idx, 4)
-                ax = axes[row, col]
-                ax.axis('off')
+                ax = axes[row, col]; ax.axis('off')
                 img_buf = draw_geometry_image(p_data[0], size_px=220)
                 ax.imshow(img_buf)
                 ax.set_title(f"Q{idx+1}: Find {p_data[4]}", fontsize=10, fontweight='bold', pad=1)
-                
             pdf.savefig(fig_ws); plt.close(fig_ws)
 
             fig_ans, ax_ans = plt.subplots(figsize=(8.27, 11.69))
@@ -398,7 +327,6 @@ def create_pdf_bytes(target_metric, num_shapes):
     except Exception as e:
         st.error(f"PDF Generation Error: {e}")
         raise e
-
     buffer.seek(0)
     return buffer.getvalue()
 
@@ -411,6 +339,7 @@ if 'level' not in st.session_state: st.session_state.level = "1"
 if 'interaction_mode' not in st.session_state: st.session_state.interaction_mode = "Solve"
 if 'solution_req' not in st.session_state: st.session_state.solution_req = "demonstrated"
 if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
+if 'show_controls' not in st.session_state: st.session_state.show_controls = False
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
 if 'id_feedback' not in st.session_state: st.session_state.id_feedback = ""
@@ -450,15 +379,15 @@ with col_set:
     with st.popover("⚙️", use_container_width=True):
         st.write("**Settings**")
         st.radio("Question Type", ["Graphical", "Word Problem"], key="question_type", horizontal=True, on_change=handle_settings_change)
-        
         if st.session_state.question_type == "Graphical":
             st.slider("Composite Shapes", 1, 3, key="num_shapes", on_change=handle_settings_change)
         else:
             st.radio("Level", ["1", "2"], key="level", horizontal=True, on_change=handle_settings_change)
-            
         st.radio("Target Metric", ["Volume", "Surface Area"], key="geom_metric", horizontal=True, on_change=handle_settings_change)
         st.radio("Interaction Mode", ["Identification", "Solve"], key="interaction_mode", on_change=handle_settings_change)
         st.radio("Solution Required", ["demonstrated", "numeric"], key="solution_req", on_change=handle_settings_change)
+        st.radio("Camera Mode", ["None", "App", "Native"], key="camera_mode", horizontal=True, on_change=handle_settings_change)
+        st.toggle("Canvas Controls", key="show_controls", on_change=handle_settings_change)
 
 # --- Master App Logic ---
 if st.session_state.generating:
@@ -471,13 +400,11 @@ if st.session_state.generating:
             wp_data = generate_geom_word_problem(st.session_state.level, st.session_state.geom_metric, st.session_state.num_shapes)
             st.session_state.geom_problem_data = wp_data
             st.session_state.problem_image_context = draw_word_problem_image(wp_data.get('problem_text', ''), width_px=380, height_px=760)
-            
         st.session_state.generating = False
         st.rerun()
 
 else:
     bg_image = st.session_state.problem_image_context
-    
     if st.session_state.question_type == "Graphical":
         stack, correct_formula, ans, target_var, target_metric = st.session_state.geom_problem_data
     else:
@@ -492,9 +419,7 @@ else:
         else:
             st.image(bg_image, use_container_width=True)
             st.write("Which geometric formula is required to solve this composite shape?")
-            
             correct_eq, dist1, dist2 = build_geom_equations(correct_formula, target_metric, st.session_state.num_shapes)
-            
             if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
                 options = [f"${correct_eq}$", f"${dist1}$", f"${dist2}$"]
                 random.shuffle(options)
@@ -515,10 +440,8 @@ else:
             if f_msg:
                 if "Correct" in f_msg: st.success(f"🌟 {f_msg}")
                 else: st.warning(f"🤖 {f_msg}")
-            
     else:
         canvas_height = 380 if st.session_state.question_type == "Graphical" else 760
-        
         if st.session_state.question_type == "Graphical":
             shape_sequence = [f"{s['type']} (Cavity: {s.get('is_cavity', False)})" for s in stack]
             problem_context = f"This is a 3D composite graphical problem calculating {target_metric}. Components: {shape_sequence}. The correct final target answer value is approximately {ans}."
@@ -530,10 +453,13 @@ else:
             height_px=canvas_height,
             key_prefix=f"geom_suite_{st.session_state.problem_suite_refresh_id}",
             solution_requirement=st.session_state.get('solution_req', 'demonstrated'),
-            problem_context=problem_context
+            problem_context=problem_context,
+            show_controls=st.session_state.show_controls,
+            camera_mode=st.session_state.camera_mode
         )
 
-    st.write("---")
+    st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+    st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
     if st.button("Give me a new geometry problem!", use_container_width=True):
         handle_settings_change()
         st.rerun()
