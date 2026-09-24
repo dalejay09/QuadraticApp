@@ -7,6 +7,11 @@ import re
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+# --- Force Matplotlib to use classic LaTeX styling ---
+plt.rcParams['mathtext.fontset'] = 'cm'
+plt.rcParams['font.family'] = 'serif'
+
 import numpy as np
 from PIL import Image
 from datetime import datetime
@@ -53,18 +58,18 @@ class AIWorksheetSolutions(BaseModel):
     solutions: list[SolutionRow]
 
 # --- Math Engine: ALGEBRA FORMATTING HELPER ---
-def format_alg(expr):
-    """Cleans up raw algebraic strings (e.g., '+ -3' to '- 3', removing 0x, '1x' to 'x')"""
+def format_alg(expr, var='x'):
+    """Cleans up raw algebraic strings dynamically based on the chosen variable"""
     expr = expr.replace("+ -", "- ").replace("- -", "+ ")
-    expr = re.sub(r'[+-]\s*0x\^2\b', '', expr)
-    expr = re.sub(r'\b0x\^2\b', '', expr)
-    expr = re.sub(r'[+-]\s*0x\b', '', expr)
-    expr = re.sub(r'\b0x\b', '', expr)
+    expr = re.sub(rf'[+-]\s*0{var}\^2\b', '', expr)
+    expr = re.sub(rf'\b0{var}\^2\b', '', expr)
+    expr = re.sub(rf'[+-]\s*0{var}\b', '', expr)
+    expr = re.sub(rf'\b0{var}\b', '', expr)
     expr = re.sub(r'[+-]\s*0\b', '', expr)
-    expr = re.sub(r'\b1x\^2\b', 'x^2', expr)
-    expr = re.sub(r'\b1x\b', 'x', expr)
-    expr = re.sub(r'\b-1x\^2\b', '-x^2', expr)
-    expr = re.sub(r'\b-1x\b', '-x', expr)
+    expr = re.sub(rf'\b1{var}\^2\b', f'{var}^2', expr)
+    expr = re.sub(rf'\b1{var}\b', var, expr)
+    expr = re.sub(rf'\b-1{var}\^2\b', f'-{var}^2', expr)
+    expr = re.sub(rf'\b-1{var}\b', f'-{var}', expr)
     expr = " ".join(expr.split())
     if expr.startswith("+ "): expr = expr[2:]
     return expr.strip()
@@ -89,6 +94,7 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         p_type = random.choice(types)
 
     limit = 5 if level == "1" else 9
+    var = random.choice(['x', 'y', 'a', 'b', 'm', 'n', 'p', 'q', 't', 'k'])
     
     instruction = "Solve:"
     q_latex = ""
@@ -106,16 +112,16 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         b = r_nonzero(-limit, limit)
         d = r_nonzero(-limit, limit)
         
-        q_latex = format_alg(f"({a}x + {b})({c}x + {d})")
-        a_latex = format_alg(f"{a*c}x^2 + {a*d + b*c}x + {b*d}")
+        q_latex = format_alg(f"({a}{var} + {b})({c}{var} + {d})", var)
+        a_latex = format_alg(f"{a*c}{var}^2 + {a*d + b*c}{var} + {b*d}", var)
         
     elif p_type == 'expand_perfect':
         instruction = "Expand and simplify:"
         a = 1 if level == "1" else random.randint(2, 4)
         b = r_nonzero(-limit, limit)
         
-        q_latex = format_alg(f"({a}x + {b})^2")
-        a_latex = format_alg(f"{a**2}x^2 + {2*a*b}x + {b**2}")
+        q_latex = format_alg(f"({a}{var} + {b})^2", var)
+        a_latex = format_alg(f"{a**2}{var}^2 + {2*a*b}{var} + {b**2}", var)
         
     elif p_type == 'factorise_single':
         instruction = "Factorise completely:"
@@ -126,9 +132,9 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
             if math.gcd(a, abs(b)) == 1:
                 break
                 
-        q_latex = format_alg(f"{k*a}x^2 + {k*b}x")
-        a_latex = format_alg(f"{k}x({a}x + {b})")
-        if a == 1: a_latex = format_alg(f"{k}x(x + {b})")
+        q_latex = format_alg(f"{k*a}{var}^2 + {k*b}{var}", var)
+        a_latex = format_alg(f"{k}{var}({a}{var} + {b})", var)
+        if a == 1: a_latex = format_alg(f"{k}{var}({var} + {b})", var)
         
     elif p_type == 'factorise_quad':
         instruction = "Factorise completely:"
@@ -140,8 +146,8 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         A = a * c
         B = a * d + b * c
         C = b * d
-        q_latex = format_alg(f"{A}x^2 + {B}x + {C}")
-        a_latex = format_alg(f"({a}x + {b})({c}x + {d})")
+        q_latex = format_alg(f"{A}{var}^2 + {B}{var} + {C}", var)
+        a_latex = format_alg(f"({a}{var} + {b})({c}{var} + {d})", var)
         
     elif p_type == 'solve_linear':
         instruction = "Solve:"
@@ -155,18 +161,17 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         ans_x = random.randint(-limit, limit)
         e = (a * b - d) * ans_x + a * c
         
-        q_latex = format_alg(f"{a}({b}x + {c}) = {d}x + {e}")
-        a_latex = f"x = {ans_x}"
+        q_latex = format_alg(f"{a}({b}{var} + {c}) = {d}{var} + {e}", var)
+        a_latex = f"{var} = {ans_x}"
         
     elif p_type == 'solve_quad':
         instruction = "Solve:"
         
-        # 50% chance for a single root (perfect square) vs two distinct roots
         if random.choice([True, False]):
             r1 = r_nonzero(-limit, limit)
             B = -(2 * r1)
             C = r1**2
-            a_latex = f"x = {r1}"
+            a_latex = f"{var} = {r1}"
         else:
             r1 = r_nonzero(-limit, limit)
             r2 = r_nonzero(-limit, limit)
@@ -174,9 +179,9 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
                 r2 = r_nonzero(-limit, limit)
             B = -(r1 + r2)
             C = r1 * r2
-            a_latex = f"x = {r1}, x = {r2}"
+            a_latex = f"{var} = {r1}, {var} = {r2}"
             
-        q_latex = format_alg(f"x^2 + {B}x + {C} = 0")
+        q_latex = format_alg(f"{var}^2 + {B}{var} + {C} = 0", var)
         
     elif p_type == 'simp_mono':
         instruction = "Simplify fully:"
@@ -186,24 +191,24 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         top_c = k * random.randint(1, 4)
         bot_c = k * random.randint(2, 5)
         
-        top_str = f"{top_c}x^2" if x_power_top == 2 else f"{top_c}x"
-        bot_str = f"{bot_c}x^2" if x_power_bot == 2 else f"{bot_c}x"
+        top_str = f"{top_c}{var}^2" if x_power_top == 2 else f"{top_c}{var}"
+        bot_str = f"{bot_c}{var}^2" if x_power_bot == 2 else f"{bot_c}{var}"
         q_latex = f"\\frac{{{top_str}}}{{{bot_str}}}"
         
         sim_top = int(top_c/k)
         sim_bot = int(bot_c/k)
         if x_power_top > x_power_bot:
-            a_latex = f"\\frac{{{sim_top}x}}{{{sim_bot}}}" if sim_bot != 1 else f"{sim_top}x"
+            a_latex = f"\\frac{{{sim_top}{var}}}{{{sim_bot}}}" if sim_bot != 1 else f"{sim_top}{var}"
         else:
-            a_latex = f"\\frac{{{sim_top}}}{{{sim_bot}x}}"
+            a_latex = f"\\frac{{{sim_top}}}{{{sim_bot}{var}}}"
             
     elif p_type == 'simp_dots':
         instruction = "Simplify fully:"
         a = random.randint(2, 9)
         sign = random.choice(["+", "-"])
-        q_latex = f"\\frac{{x^2 - {a**2}}}{{x {sign} {a}}}"
+        q_latex = f"\\frac{{{var}^2 - {a**2}}}{{{var} {sign} {a}}}"
         ans_sign = "-" if sign == "+" else "+"
-        a_latex = format_alg(f"x {ans_sign} {a}")
+        a_latex = format_alg(f"{var} {ans_sign} {a}", var)
         
     elif p_type == 'simp_quad':
         instruction = "Simplify fully:"
@@ -213,23 +218,24 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         C = r1 * r2
         
         sign_r1 = "+" if -r1 >= 0 else "-"
-        bot_str = format_alg(f"x {sign_r1} {abs(-r1)}")
-        top_str = format_alg(f"x^2 + {B}x + {C}")
+        bot_str = format_alg(f"{var} {sign_r1} {abs(-r1)}", var)
+        top_str = format_alg(f"{var}^2 + {B}{var} + {C}", var)
         
         q_latex = f"\\frac{{{top_str}}}{{{bot_str}}}"
         sign_r2 = "+" if -r2 >= 0 else "-"
-        a_latex = format_alg(f"x {sign_r2} {abs(-r2)}")
+        a_latex = format_alg(f"{var} {sign_r2} {abs(-r2)}", var)
 
     return {
         "type": p_type,
         "instruction": instruction,
         "q_latex": q_latex,
-        "a_latex": a_latex
+        "a_latex": a_latex,
+        "variable": var
     }
 
-def generate_distractors(a_latex):
+def generate_distractors(a_latex, var='x'):
     d1 = a_latex.replace("+", "TEMP").replace("-", "+").replace("TEMP", "-")
-    d2 = a_latex.replace("x^2", "x").replace("x = ", "x = -")
+    d2 = a_latex.replace(f"{var}^2", var).replace(f"{var} = ", f"{var} = -")
     if d1 == a_latex: d1 = a_latex + " + 1"
     if d2 == a_latex or d2 == d1: d2 = a_latex + " - 1"
     return a_latex, d1, d2
@@ -387,7 +393,7 @@ else:
         st.image(bg_image, use_container_width=True)
         st.write("Which of the following is the correct mathematical conclusion?")
         
-        correct_opt, dist1, dist2 = generate_distractors(p_data['a_latex'])
+        correct_opt, dist1, dist2 = generate_distractors(p_data['a_latex'], p_data['variable'])
         
         if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
             options = [f"${correct_opt}$", f"${dist1}$", f"${dist2}$"]
@@ -413,7 +419,7 @@ else:
     else:
         canvas_height = 380
         
-        problem_context = f"This is an algebra problem. Instruction: {p_data['instruction']}. Question expression: {p_data['q_latex']}. The exact correct final algebraic answer is: {p_data['a_latex']}."
+        problem_context = f"This is an algebra problem. Instruction: {p_data['instruction']}. Question expression: {p_data['q_latex']}. The exact correct final algebraic answer is: {p_data['a_latex']}. The unknown variable used is '{p_data['variable']}'."
 
         ai_marking_component.render_grading_suite(
             bg_image=bg_image,
