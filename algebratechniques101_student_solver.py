@@ -101,7 +101,6 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         
     elif p_type == 'factorise_single':
         instruction = "Factorise completely:"
-        # Enforce GCD = 1 so the extracted 'k' is strictly the HIGHEST common factor
         while True:
             k = random.randint(2, limit)
             a = random.randint(1, 4)
@@ -215,10 +214,8 @@ def draw_algebra_image(problem_data, width_px=380, height_px=380):
     ax.set_ylim(0, 1)
     ax.axis('off')
     
-    # Render instruction at the very top left
     ax.text(0.05, 0.95, problem_data['instruction'], fontsize=12, fontweight='bold', va='top', ha='left')
     
-    # Handle fraction formatting sizes and position tightly beneath the instruction
     fs = 18 if "\\frac" in problem_data['q_latex'] else 16
     y_pos = 0.82 if "\\frac" in problem_data['q_latex'] else 0.86
     ax.text(0.05, y_pos, f"${problem_data['q_latex']}$", fontsize=fs, va='top', ha='left', color='black')
@@ -296,7 +293,8 @@ if 'alg_topic' not in st.session_state: st.session_state.alg_topic = "All Topics
 if 'level' not in st.session_state: st.session_state.level = "1"
 if 'interaction_mode' not in st.session_state: st.session_state.interaction_mode = "Solve"
 if 'solution_req' not in st.session_state: st.session_state.solution_req = "demonstrated"
-if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
+if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "None"
+if 'show_controls' not in st.session_state: st.session_state.show_controls = False
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
 if 'id_feedback' not in st.session_state: st.session_state.id_feedback = ""
@@ -338,6 +336,8 @@ with col_set:
         st.radio("Level", ["1", "2"], key="level", horizontal=True, on_change=handle_settings_change)
         st.radio("Interaction Mode", ["Identification", "Solve"], key="interaction_mode", on_change=handle_settings_change)
         st.radio("Solution Required", ["demonstrated", "numeric"], key="solution_req", on_change=handle_settings_change)
+        st.radio("Camera Mode", ["None", "App", "Native"], key="camera_mode", horizontal=True, on_change=handle_settings_change)
+        st.toggle("Canvas Controls", key="show_controls", on_change=handle_settings_change)
 
 # --- Master App Logic ---
 if st.session_state.generating:
@@ -383,7 +383,6 @@ else:
             else: st.warning(f"🤖 {f_msg}")
             
     else:
-        # Halved canvas height
         canvas_height = 380
         
         problem_context = f"This is an algebra problem. Instruction: {p_data['instruction']}. Question expression: {p_data['q_latex']}. The exact correct final algebraic answer is: {p_data['a_latex']}."
@@ -393,7 +392,9 @@ else:
             height_px=canvas_height,
             key_prefix=f"alg_suite_{st.session_state.problem_suite_refresh_id}",
             solution_requirement=st.session_state.get('solution_req', 'demonstrated'),
-            problem_context=problem_context
+            problem_context=problem_context,
+            show_controls=st.session_state.show_controls,
+            camera_mode=st.session_state.camera_mode
         )
 
     st.write("---")
