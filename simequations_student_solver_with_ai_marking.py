@@ -29,6 +29,18 @@ st.markdown("""
         background-color: #0056b3 !important;
         border-color: #0056b3 !important;
     }
+    
+    /* Target the exact 'Next Problem' button by stepping up to Streamlit's element container */
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
+        background-color: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
+        background-color: #218838 !important;
+        border-color: #218838 !important;
+    }
+    
     .stRadio > div { gap: 0rem; }
     [data-testid="stHorizontalBlock"] { gap: 0.5rem; align-items: center; }
     div[data-testid="stToolbar"] { display: none; }
@@ -149,7 +161,7 @@ def generate_algebra_problem(override_var_count=None):
 
 # --- Visual Engine: BACKEND MATPLOTLIB (problem background) ---
 def draw_equations(canvas_eqs, height_px):
-    width_px = 350
+    width_px = 380
     fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100) 
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
     ax.set_xlim(0, 1)
@@ -180,13 +192,12 @@ def draw_equations(canvas_eqs, height_px):
 
 # --- Integrated AI-PDF Generation Engine (PDF Worksheet only feature) ---
 def create_pdf_bytes(var_count):
-    from google import genai # lazily import inside for PDF isolation
+    from google import genai
     buffer = io.BytesIO()
     with PdfPages(buffer) as pdf:
         problems = [generate_algebra_problem(var_count) for _ in range(20)]
         ai_steps = {}
         try:
-            # unique connection for background process
             client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
             payload = "".join([f"Q{i+1}: Eqs: [{' ; '.join(p[0])}] | Ans: [{', '.join([f'{k}={v}' for k,v in p[1].items()])}]\n" for i, p in enumerate(problems)])
             prompt = f"Write the concise, human-readable step-by-step solution method for each problem. Keep it very brief. Plain text formatting.\nData:\n{payload}"
@@ -232,20 +243,17 @@ def create_pdf_bytes(var_count):
 # --- Overhead State Initialization managed by parent App ---
 if 'generating' not in st.session_state: st.session_state.generating = True
 if 'var_count' not in st.session_state: st.session_state.var_count = 1
-if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
+if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "None"
+if 'show_controls' not in st.session_state: st.session_state.show_controls = False
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'scroll_to_top' not in st.session_state: st.session_state.scroll_to_top = False
-# manage unique problem id/canvas reset logic overhead
 if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
 
 def handle_algebra_settings_change():
-    """
-    Overhead settings logic forces problem regenerate AND component reinitialization logic.
-    """
     st.session_state.generating = True
     st.session_state.pdf_bytes = None
-    st.session_state.current_marking_color_index = 0 # reset app-level color index
-    st.session_state.problem_suite_refresh_id += 1 # uniquely key the component/init logic
+    st.session_state.current_marking_color_index = 0 
+    st.session_state.problem_suite_refresh_id += 1 
 
 if st.session_state.scroll_to_top:
     components.html("<script>window.parent.scrollTo(0, 0);</script>", height=0)
@@ -277,48 +285,42 @@ with col_set:
     with st.popover("⚙️", use_container_width=True):
         st.write("**Settings**")
         st.radio("Variables", [1, 2, 3], key="var_count", on_change=handle_algebra_settings_change)
-        st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
+        st.radio("Camera Mode", ["None", "App", "Native"], key="camera_mode", horizontal=True)
+        st.toggle("Canvas Controls", key="show_controls", on_change=handle_algebra_settings_change)
 
 # Main Application Logic
 if st.session_state.generating:
     with st.spinner("Generating equations..."):
-        # Parent App uniquely context data generation (Algebra specifc)
         if len(st.session_state.get("algebra_math_context_data", [])) == 6:
             eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = generate_algebra_problem()
         else:
             eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = generate_algebra_problem()
         
         st.session_state.algebra_math_context_data = (eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs)
-        # Parent app generates context-specific background problem image used by marking component
         st.session_state.problem_image_context = draw_equations(canvas_eqs, canvas_height)
         st.session_state.algebraic_context_vars_list = vars_list
         
-        # Reset overarching application color sequence management state for new problem.
         st.session_state.current_marking_color_index = 0
-        
         st.session_state.generating = False
         st.rerun()
 
 else:
-    # Read generated contextual problem data. 
     eqs, solutions, vars_list, canvas_height, fallback, canvas_eqs = st.session_state.algebra_math_context_data
     context_bg_image = st.session_state.problem_image_context
     context_vars_list = st.session_state.algebraic_context_vars_list
 
-    # parent app specific header
     st.write(f"Solve for **{', '.join(context_vars_list)}**! Color cycle reset.")
 
-    # --- INJECT UNIVERSAL MARKING SUITE COMPONENT ---
-    # WE PASS NO PLAIN TEXT EQUATIONS OR SOLUTIONS TO THE GRADING ENGINE.
-    # The gradingengine is functionally pure; it rely entirely on background VQA deduction.
     ai_marking_component.render_grading_suite(
         bg_image=context_bg_image,
         height_px=canvas_height,
-        # Uniquely key the specific logic refresh/init encapsulantes state bleeding
-        key_prefix=f"marking_suite_{st.session_state.problem_suite_refresh_id}"
+        key_prefix=f"marking_suite_{st.session_state.problem_suite_refresh_id}",
+        show_controls=st.session_state.show_controls,
+        camera_mode=st.session_state.camera_mode
     )
 
-    st.write("")
+    st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+    st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
     if st.button("Give me a new problem!", use_container_width=True):
-        handle_algebra_settings_change() # Parent app manages overarching business logic shared states resets component ID force refresh
+        handle_algebra_settings_change() 
         st.rerun()
