@@ -60,7 +60,6 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
     ]
     
     if specific_type != "All Topics (Random)":
-        # Map dropdown to types
         mapping = {
             "Expanding": ['expand_binomial', 'expand_perfect'],
             "Factorising": ['factorise_single', 'factorise_quad'],
@@ -73,7 +72,6 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
 
     limit = 5 if level == "1" else 9
     
-    # Defaults
     instruction = "Solve:"
     q_latex = ""
     a_latex = ""
@@ -103,10 +101,14 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         
     elif p_type == 'factorise_single':
         instruction = "Factorise completely:"
-        k = random.randint(2, limit)
-        a = random.randint(1, 4)
-        b = r_nonzero(-limit, limit)
-        
+        # Enforce GCD = 1 so the extracted 'k' is strictly the HIGHEST common factor
+        while True:
+            k = random.randint(2, limit)
+            a = random.randint(1, 4)
+            b = r_nonzero(-limit, limit)
+            if math.gcd(a, abs(b)) == 1:
+                break
+                
         q_latex = format_alg(f"{k*a}x^2 + {k*b}x")
         a_latex = format_alg(f"{k}x({a}x + {b})")
         if a == 1: a_latex = format_alg(f"{k}x(x + {b})")
@@ -126,17 +128,13 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         
     elif p_type == 'solve_linear':
         instruction = "Solve:"
-        # Form: a(bx + c) = dx + e
-        # (ab - d)x = e - ac  -> x = (e-ac)/(ab-d)
         a = random.randint(2, 5)
         b = 1 if level == "1" else random.randint(2, 4)
         c = r_nonzero(-limit, limit)
         d = r_nonzero(1, 5)
         
-        # Prevent parallel/div by zero
         if a * b == d: d += 1 
         
-        # Ensure clean integer or simple 1-decimal answer
         ans_x = random.randint(-limit, limit)
         e = (a * b - d) * ans_x + a * c
         
@@ -187,7 +185,6 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         B = -(r1 + r2)
         C = r1 * r2
         
-        # Denominator will be (x - r1)
         sign_r1 = "+" if -r1 >= 0 else "-"
         bot_str = format_alg(f"x {sign_r1} {abs(-r1)}")
         top_str = format_alg(f"x^2 + {B}x + {C}")
@@ -204,7 +201,6 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
     }
 
 def generate_distractors(a_latex):
-    """Creates plausible distractors for identification mode by swapping signs."""
     d1 = a_latex.replace("+", "TEMP").replace("-", "+").replace("TEMP", "-")
     d2 = a_latex.replace("x^2", "x").replace("x = ", "x = -")
     if d1 == a_latex: d1 = a_latex + " + 1"
@@ -212,18 +208,20 @@ def generate_distractors(a_latex):
     return a_latex, d1, d2
 
 # --- Visual Engine: CANVAS RENDERER ---
-def draw_algebra_image(problem_data, size_px=760):
-    fig, ax = plt.subplots(figsize=(size_px/100, size_px/100), dpi=100)
+def draw_algebra_image(problem_data, width_px=380, height_px=380):
+    fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100)
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis('off')
     
-    # Place instruction and question at the top left, leaving the rest blank for workings
-    ax.text(0.05, 0.95, problem_data['instruction'], fontsize=14, fontweight='bold', va='top', ha='left')
+    # Render instruction at the very top left
+    ax.text(0.05, 0.95, problem_data['instruction'], fontsize=12, fontweight='bold', va='top', ha='left')
     
-    # Handle fraction formatting sizes
-    fs = 24 if "\\frac" in problem_data['q_latex'] else 20
-    ax.text(0.05, 0.82, f"${problem_data['q_latex']}$", fontsize=fs, va='top', ha='left', color='black')
+    # Handle fraction formatting sizes and position tightly beneath the instruction
+    fs = 18 if "\\frac" in problem_data['q_latex'] else 16
+    y_pos = 0.82 if "\\frac" in problem_data['q_latex'] else 0.86
+    ax.text(0.05, y_pos, f"${problem_data['q_latex']}$", fontsize=fs, va='top', ha='left', color='black')
     
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, facecolor='white', transparent=False)
@@ -346,7 +344,7 @@ if st.session_state.generating:
     with st.spinner("Generating algebra problem..."):
         p_data = generate_algebra_problem(st.session_state.level, st.session_state.alg_topic)
         st.session_state.alg_problem_data = p_data
-        st.session_state.problem_image_context = draw_algebra_image(p_data, size_px=760)
+        st.session_state.problem_image_context = draw_algebra_image(p_data, width_px=380, height_px=380)
         st.session_state.generating = False
         st.rerun()
 
@@ -385,7 +383,8 @@ else:
             else: st.warning(f"🤖 {f_msg}")
             
     else:
-        canvas_height = 760
+        # Halved canvas height
+        canvas_height = 380
         
         problem_context = f"This is an algebra problem. Instruction: {p_data['instruction']}. Question expression: {p_data['q_latex']}. The exact correct final algebraic answer is: {p_data['a_latex']}."
 
