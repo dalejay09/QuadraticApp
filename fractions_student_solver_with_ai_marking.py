@@ -208,6 +208,17 @@ st.markdown("""
         background-color: #0056b3 !important;
         border-color: #0056b3 !important;
     }
+    
+    /* Target the exact 'Next Problem' button by stepping up to Streamlit's element container */
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
+        background-color: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
+        background-color: #218838 !important;
+        border-color: #218838 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -218,6 +229,7 @@ if 'canvas_key' not in st.session_state: st.session_state.canvas_key = 0
 if 'max_lcm' not in st.session_state: st.session_state.max_lcm = 100
 if 'frac_count' not in st.session_state: st.session_state.frac_count = 3
 if 'simplify_answers' not in st.session_state: st.session_state.simplify_answers = "No"
+if 'show_controls' not in st.session_state: st.session_state.show_controls = False
 if 'current_frac_count' not in st.session_state: st.session_state.current_frac_count = 3
 if 'color_index' not in st.session_state: st.session_state.color_index = 0
 if 'stroke_history' not in st.session_state: st.session_state.stroke_history = [[]]
@@ -301,6 +313,7 @@ with col2:
         disabled_simp = (st.session_state.frac_count == 1)
         st.radio("Simplify Answers", ["Yes", "Yes Always", "No"], key="simplify_answers", on_change=handle_settings_change, disabled=disabled_simp)
         st.radio("Max LCM Limit", [50, 100, 200], key="max_lcm", on_change=handle_settings_change)
+        st.toggle("Canvas Controls", key="show_controls", on_change=handle_settings_change)
 
 current_color_hex = PEN_COLORS[st.session_state.color_index]
 current_color_name = COLOR_NAMES[st.session_state.color_index]
@@ -354,27 +367,28 @@ else:
         key=f"canvas_{st.session_state.canvas_key}",
     )
 
-    col_u, col_c = st.columns(2)
-    with col_u:
-        if st.button("↩️ Undo", use_container_width=True):
-            if len(st.session_state.stroke_history) > 1:
-                st.session_state.stroke_history.pop()
-                last_valid = st.session_state.stroke_history[-1]
-                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
+    if st.session_state.get('show_controls', False):
+        col_u, col_c = st.columns(2)
+        with col_u:
+            if st.button("↩️ Undo", use_container_width=True):
+                if len(st.session_state.stroke_history) > 1:
+                    st.session_state.stroke_history.pop()
+                    last_valid = st.session_state.stroke_history[-1]
+                    st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": last_valid}
+                    st.session_state.canvas_key += 1
+                    st.rerun()
+        with col_c:
+            if st.button("🗑️ Clear All", use_container_width=True):
+                st.session_state.stroke_history = [[]]
+                st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
+                st.session_state.color_index = 0
+                
+                # Reset smart routing comparators
+                st.session_state.last_submitted_text = None
+                st.session_state.last_canvas_state = []
+                
                 st.session_state.canvas_key += 1
                 st.rerun()
-    with col_c:
-        if st.button("🗑️ Clear All", use_container_width=True):
-            st.session_state.stroke_history = [[]]
-            st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
-            st.session_state.color_index = 0
-            
-            # Reset smart routing comparators
-            st.session_state.last_submitted_text = None
-            st.session_state.last_canvas_state = []
-            
-            st.session_state.canvas_key += 1
-            st.rerun()
 
     current_objects = canvas_result.json_data.get("objects", []) if canvas_result.json_data else []
     last_saved_objects = st.session_state.stroke_history[-1]
@@ -417,7 +431,7 @@ else:
         else:
             st.session_state.stroke_history.append(current_objects.copy())
 
-    st.write("---")
+    st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
     
     # --- MAGIC UI INTERCEPT ---
     if st.session_state.pending_frac_update is not None:
@@ -582,7 +596,8 @@ else:
     if st.session_state.ai_feedback and not st.session_state.is_correct and "can be simplified further" not in st.session_state.ai_feedback:
         st.info(st.session_state.ai_feedback)
 
-    st.write("")
+    st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+    st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
     if st.button("Give me a new problem!", use_container_width=True):
         st.session_state.generating = True
         st.rerun()
