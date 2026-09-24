@@ -120,7 +120,6 @@ def generate_quadratic_data():
         
         correct = ['Standard']
         
-        # DYNAMIC CHECK: If random points gave us special features, they are more efficient!
         if sum(1 for p in points if p[1] == 0) >= 2:
             correct.append('Intercept')
             
@@ -565,6 +564,8 @@ if 'show_camera' not in st.session_state:
     st.session_state.show_camera = False
 if 'pdf_bytes' not in st.session_state:
     st.session_state.pdf_bytes = None
+if 'camera_mode' not in st.session_state: 
+    st.session_state.camera_mode = "None"
     
 st.title("Student Graph Solver")
 
@@ -580,6 +581,17 @@ st.markdown("""
         background-color: #0073e6; /* Slightly darker blue on hover */
         border: none;
     }
+    
+    /* Target the exact 'Next Problem' button by stepping up to Streamlit's element container */
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
+        background-color: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
+        background-color: #218838 !important;
+        border-color: #218838 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -593,7 +605,7 @@ def render_settings_cog():
         st.toggle("Show Coordinates", key="show_coordinates", on_change=handle_settings_change)
         st.toggle("Show Grid Lines", key="show_grid", on_change=handle_settings_change)
         st.toggle("Equation Buttons", key="show_equations")
-        st.radio("Camera Mode", ["App", "Native"], key="camera_mode", horizontal=True)
+        st.radio("Camera Mode", ["None", "App", "Native"], key="camera_mode", horizontal=True, on_change=handle_settings_change)
 
 # 1. Top Bar: Actions & Settings 
 col_actions, col_set = st.columns([5, 1])
@@ -718,6 +730,8 @@ else:
         
         if not st.session_state.get('mark_working', False):
             st.info(steps)
+            st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+            st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
             if st.button("Next Graph", use_container_width=True):
                 st.session_state.generating = True
                 st.rerun()
@@ -727,6 +741,8 @@ else:
                 if st.session_state.ai_feedback:
                     st.success(f"🎉 **AI Marker:** {st.session_state.ai_feedback}")
                 st.info(steps)
+                st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+                st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
                 if st.button("Next Graph", use_container_width=True):
                     st.session_state.generating = True
                     st.rerun()
@@ -745,8 +761,11 @@ else:
                             st.session_state.ai_feedback = ""
                             st.rerun()
                 else:
-                    cam_mode = st.session_state.get('camera_mode', 'App')
-                    if cam_mode == 'App':
+                    cam_mode = st.session_state.get('camera_mode', 'None')
+                    picture = None
+                    if cam_mode == 'None':
+                        st.info("📷 Camera is disabled in settings. Enable it to submit algebraic workings.")
+                    elif cam_mode == 'App':
                         picture = st.camera_input("Snap a photo of your working:")
                     else:
                         picture = st.file_uploader("Upload or snap a photo of your working:", type=['png', 'jpg', 'jpeg'])
@@ -792,7 +811,7 @@ else:
                     if st.session_state.ai_feedback and not st.session_state.ai_is_correct:
                         st.warning(f"**AI Marker Feedback:**\n\n{st.session_state.ai_feedback}")
                         
-                    st.write("---")
+                    st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
                     col_retry, col_skip = st.columns(2)
                     with col_retry:
                         if st.button("Cancel Marker", use_container_width=True):
