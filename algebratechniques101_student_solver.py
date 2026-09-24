@@ -52,14 +52,14 @@ def format_alg(expr):
     return expr.strip()
 
 # --- Math Engine: CORE GENERATOR ---
-def generate_algebra_problem(level="1", specific_type="Random"):
+def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
     types = [
         'expand_binomial', 'expand_perfect', 'factorise_single', 
         'factorise_quad', 'solve_linear', 'solve_quad', 
         'simp_mono', 'simp_dots', 'simp_quad'
     ]
     
-    if specific_type != "Random":
+    if specific_type != "All Topics (Random)":
         # Map dropdown to types
         mapping = {
             "Expanding": ['expand_binomial', 'expand_perfect'],
@@ -385,7 +385,6 @@ else:
             else: st.warning(f"🤖 {f_msg}")
             
     else:
-        # Full square canvas giving plenty of space beneath the equation
         canvas_height = 760
         
         problem_context = f"This is an algebra problem. Instruction: {p_data['instruction']}. Question expression: {p_data['q_latex']}. The exact correct final algebraic answer is: {p_data['a_latex']}."
