@@ -58,11 +58,11 @@ def render_grading_suite(
 
     st.write(f"Current pen: **{current_color_name}**")
     
+    # Removed the hallucinated 'display_toolbar' parameter to fix the TypeError
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", stroke_width=active_stroke_width, stroke_color=active_stroke_color,
-        background_image=bg_image, update_streamlit=True, height=height_px, width=350,
+        background_image=bg_image, update_streamlit=True, height=height_px, width=380,
         drawing_mode="freedraw", return_image_data=True, initial_drawing=st.session_state.get(INITIAL_DWG_KEY, {"version": "4.4.0", "objects": []}),
-        display_toolbar=show_controls, 
         key=k(f"canvas_{st.session_state.get(CANVAS_KEY, 0)}")
     )
 
