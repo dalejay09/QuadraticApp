@@ -485,28 +485,13 @@ else:
                             if needs_rerun:
                                 st.rerun()
                     else:
-                        st.session_state.local_checked = True
-                        st.session_state.is_correct = False
-                        st.session_state.ai_feedback = ""
+                        trigger_ai = True
             else:
                 st.error("Please type two numbers separated by a symbol (like 35.70 or 35/70).")
                 
         # Save state for the next submit cycle
         st.session_state.last_submitted_text = user_answer
         st.session_state.last_canvas_state = current_objects.copy()
-
-    # --- AI DIAGNOSTICS UI (Local Check Warnings) ---
-    if st.session_state.local_checked and not trigger_ai:
-        if st.session_state.is_correct:
-            st.success(st.session_state.ai_feedback)
-        else:
-            if "can be simplified further" in st.session_state.ai_feedback:
-                st.warning(st.session_state.ai_feedback)
-            else:
-                st.warning("💡 **Almost there!** The final answer isn't quite right, or is missing.")
-                
-            if st.button("🤖 Ask AI Tutor to check my workings", use_container_width=True):
-                trigger_ai = True
 
     # --- THE AI EXECUTION BLOCK ---
     if trigger_ai:
@@ -592,9 +577,17 @@ else:
         else:
             st.error("Please draw your working on the canvas first!")
 
-    # Display isolated AI or Phase Transition feedback safely
-    if st.session_state.ai_feedback and not st.session_state.is_correct and "can be simplified further" not in st.session_state.ai_feedback:
-        st.info(st.session_state.ai_feedback)
+    # --- FEEDBACK DISPLAY ---
+    if st.session_state.local_checked and not trigger_ai:
+        if st.session_state.is_correct:
+            st.success(st.session_state.ai_feedback)
+        else:
+            if "can be simplified further" in st.session_state.ai_feedback:
+                st.warning(st.session_state.ai_feedback)
+            elif st.session_state.ai_feedback:
+                st.info(st.session_state.ai_feedback)
+            else:
+                st.warning("💡 **Almost there!** The final answer isn't quite right, or is missing.")
 
     st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
     st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
