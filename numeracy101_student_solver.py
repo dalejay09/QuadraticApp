@@ -24,6 +24,18 @@ st.markdown("""
     <style>
     button[kind="primary"] { background-color: #007AFF !important; border-color: #007AFF !important; color: white !important; }
     button[kind="primary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
+    
+    /* Target the exact 'Next Problem' button by stepping up to Streamlit's element container */
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
+        background-color: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
+        background-color: #218838 !important;
+        border-color: #218838 !important;
+    }
+    
     .stRadio > div { gap: 0rem; }
     [data-testid="stHorizontalBlock"] { gap: 0.5rem; align-items: center; }
     div[data-testid="stToolbar"] { display: none; }
@@ -159,7 +171,8 @@ def create_pdf_bytes(domain):
 if 'generating' not in st.session_state: st.session_state.generating = True
 if 'num_domain' not in st.session_state: st.session_state.num_domain = "Financial (Money)"
 if 'interaction_mode' not in st.session_state: st.session_state.interaction_mode = "Solve"
-if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "App"
+if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "None"
+if 'show_controls' not in st.session_state: st.session_state.show_controls = False
 if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
 if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
 
@@ -197,6 +210,8 @@ with col_set:
         st.write("**Numeracy Settings**")
         domains = ["Financial (Money)", "DIY & Measurement", "Time & Travel", "Data & Statistics", "Baking & Proportions"]
         st.selectbox("Curriculum Domain", domains, key="num_domain", on_change=handle_settings_change)
+        st.radio("Camera Mode", ["None", "App", "Native"], key="camera_mode", horizontal=True, on_change=handle_settings_change)
+        st.toggle("Canvas Controls", key="show_controls", on_change=handle_settings_change)
 
 # --- Master App Logic ---
 if st.session_state.generating:
@@ -220,10 +235,13 @@ else:
         height_px=760,
         key_prefix=f"num_suite_{st.session_state.problem_suite_refresh_id}",
         solution_requirement="numeric", 
-        problem_context=problem_context
+        problem_context=problem_context,
+        show_controls=st.session_state.get('show_controls', False),
+        camera_mode=st.session_state.get('camera_mode', 'None')
     )
 
-    st.write("---")
+    st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+    st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
     if st.button("Give me a new numeracy problem!", use_container_width=True):
         handle_settings_change()
         st.rerun()
