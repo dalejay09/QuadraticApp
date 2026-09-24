@@ -27,13 +27,13 @@ st.markdown("""
     button[kind="primary"] { background-color: #007AFF !important; border-color: #007AFF !important; color: white !important; }
     button[kind="primary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
     
-    /* Target the exact 'Next Problem' button and make it green without affecting other secondary buttons */
-    div[data-testid="stMarkdownContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
+    /* Target the exact 'Next Problem' button by stepping up to Streamlit's element container */
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
         background-color: #28a745 !important;
         border-color: #28a745 !important;
         color: white !important;
     }
-    div[data-testid="stMarkdownContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
+    div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
         background-color: #218838 !important;
         border-color: #218838 !important;
     }
