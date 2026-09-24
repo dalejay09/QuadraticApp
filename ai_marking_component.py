@@ -139,6 +139,11 @@ def render_grading_suite(
     They are currently writing in: {current_color_name}.
     
     {requirement_rule}
+
+    IMPORTANT GRADING RULES FOR DIGITAL INK CORRECTIONS:
+    1. The student is writing on a digital canvas and may not use an eraser. Their LATEST, definitive attempt is written in the active {current_color_name} ink. Treat all other colors as older mistakes or superseded workings.
+    2. Sign Overwriting: If a student sketches a vertical line or a plus sign over an existing minus sign, evaluate it as a positive sign. If they sketch a horizontal line over an existing plus sign, evaluate it as a minus sign. Always trust the {current_color_name} ink modifier.
+    3. Overlapping Strikethroughs: Students will often leave old strikethrough lines on incorrectly eliminated terms. Ignore superseded strikethroughs from older colors. Only evaluate the eliminations and the final answer written in the active {current_color_name} ink.
     
     CRITICAL VISUAL GRADING RULE:
     - If the student solves the problem correctly using the chronology of their workings and fulfills the stated requirement above, reply EXACTLY with "CORRECT:" on the first line, followed by a brief congratulatory message.
