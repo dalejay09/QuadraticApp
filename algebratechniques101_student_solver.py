@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 # --- Import our Universal AI Marking Suite ---
 import ai_marking_component
 
-st.set_page_config(page_title="Algebra 101", page_icon="✖️", layout="centered")
+st.set_page_config(page_title="Algebra Techniques 101", page_icon="✖️", layout="centered")
 
 if 'PEN_COLORS' not in st.session_state:
     st.session_state.PEN_COLORS = ["#1E90FF", "#FF2400", "#32CD32", "#9400D3", "#FF8C00"]
@@ -160,13 +160,23 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         
     elif p_type == 'solve_quad':
         instruction = "Solve:"
-        r1 = r_nonzero(-limit, limit)
-        r2 = r_nonzero(-limit, limit)
-        B = -(r1 + r2)
-        C = r1 * r2
         
+        # 50% chance for a single root (perfect square) vs two distinct roots
+        if random.choice([True, False]):
+            r1 = r_nonzero(-limit, limit)
+            B = -(2 * r1)
+            C = r1**2
+            a_latex = f"x = {r1}"
+        else:
+            r1 = r_nonzero(-limit, limit)
+            r2 = r_nonzero(-limit, limit)
+            while r2 == r1:
+                r2 = r_nonzero(-limit, limit)
+            B = -(r1 + r2)
+            C = r1 * r2
+            a_latex = f"x = {r1}, x = {r2}"
+            
         q_latex = format_alg(f"x^2 + {B}x + {C} = 0")
-        a_latex = f"x = {r1}, x = {r2}"
         
     elif p_type == 'simp_mono':
         instruction = "Simplify fully:"
@@ -325,7 +335,7 @@ def handle_settings_change():
     st.session_state.problem_suite_refresh_id += 1 
 
 # --- UI Setup ---
-st.title("Algebra 101 ✖️")
+st.title("Algebra Techniques 101 ✖️")
 
 col_actions, col_set = st.columns([5, 1])
 with col_actions:
