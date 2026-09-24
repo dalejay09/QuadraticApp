@@ -58,7 +58,6 @@ def render_grading_suite(
 
     st.write(f"Current pen: **{current_color_name}**")
     
-    # Removed the hallucinated 'display_toolbar' parameter to fix the TypeError
     canvas_result = st_canvas(
         fill_color="rgba(255, 165, 0, 0.3)", stroke_width=active_stroke_width, stroke_color=active_stroke_color,
         background_image=bg_image, update_streamlit=True, height=height_px, width=380,
@@ -68,7 +67,7 @@ def render_grading_suite(
 
     # Conditionally render our custom UI button controls
     if show_controls or camera_mode != "None":
-        st.write("---")
+        st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
         t_col1, t_col2, t_col3, t_col4 = st.columns([1.5, 1, 1, 1.2])
         
         if show_controls:
@@ -146,7 +145,7 @@ def render_grading_suite(
     - If their solution or step-by-step working is incorrect or misses the required format, reply EXACTLY with "INCORRECT:" on the first line, followed by a brief hint on what to do next. Do NOT give them the final answer.
     """
 
-    st.write("---")
+    st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
     if st.button("Check My Answer!", type="primary", use_container_width=True, key=k("check_btn")):
         payload_images = []
         if canvas_result.image_data is not None and len(stroke_hist[-1]) > 0:

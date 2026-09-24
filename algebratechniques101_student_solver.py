@@ -26,6 +26,18 @@ st.markdown("""
     <style>
     button[kind="primary"] { background-color: #007AFF !important; border-color: #007AFF !important; color: white !important; }
     button[kind="primary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
+    
+    /* Target the exact 'Next Problem' button and make it green without affecting other secondary buttons */
+    div[data-testid="stMarkdownContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
+        background-color: #28a745 !important;
+        border-color: #28a745 !important;
+        color: white !important;
+    }
+    div[data-testid="stMarkdownContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
+        background-color: #218838 !important;
+        border-color: #218838 !important;
+    }
+    
     .stRadio > div { gap: 0rem; }
     [data-testid="stHorizontalBlock"] { gap: 0.5rem; align-items: center; }
     div[data-testid="stToolbar"] { display: none; }
@@ -43,29 +55,18 @@ class AIWorksheetSolutions(BaseModel):
 # --- Math Engine: ALGEBRA FORMATTING HELPER ---
 def format_alg(expr):
     """Cleans up raw algebraic strings (e.g., '+ -3' to '- 3', removing 0x, '1x' to 'x')"""
-    # 1. Clean raw operator clashes
     expr = expr.replace("+ -", "- ").replace("- -", "+ ")
-    
-    # 2. Aggressively remove zero coefficients (e.g., + 0x, - 0x^2, + 0)
     expr = re.sub(r'[+-]\s*0x\^2\b', '', expr)
     expr = re.sub(r'\b0x\^2\b', '', expr)
     expr = re.sub(r'[+-]\s*0x\b', '', expr)
     expr = re.sub(r'\b0x\b', '', expr)
     expr = re.sub(r'[+-]\s*0\b', '', expr)
-    
-    # 3. Clean up '1' coefficients
     expr = re.sub(r'\b1x\^2\b', 'x^2', expr)
     expr = re.sub(r'\b1x\b', 'x', expr)
     expr = re.sub(r'\b-1x\^2\b', '-x^2', expr)
     expr = re.sub(r'\b-1x\b', '-x', expr)
-    
-    # 4. Standardize any double spaces left behind by removed terms
     expr = " ".join(expr.split())
-    
-    # 5. Clean dangling positive signs at the absolute start of expressions
-    if expr.startswith("+ "): 
-        expr = expr[2:]
-        
+    if expr.startswith("+ "): expr = expr[2:]
     return expr.strip()
 
 # --- Math Engine: CORE GENERATOR ---
@@ -414,7 +415,8 @@ else:
             camera_mode=st.session_state.camera_mode
         )
 
-    st.write("---")
+    st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+    st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
     if st.button("Give me a new algebra problem!", use_container_width=True):
         handle_settings_change()
         st.rerun()
