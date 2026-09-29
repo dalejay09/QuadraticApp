@@ -4,6 +4,7 @@ import math
 import io
 import json
 import re
+import textwrap
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -17,6 +18,7 @@ from PIL import Image
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 from pydantic import BaseModel, Field
+from google import genai
 
 # --- Import our Universal AI Marking Suite ---
 import ai_marking_component
@@ -31,18 +33,12 @@ st.markdown("""
     <style>
     button[kind="primary"] { background-color: #007AFF !important; border-color: #007AFF !important; color: white !important; }
     button[kind="primary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
-    
-    /* Target the exact 'Next Problem' button by stepping up to Streamlit's element container */
     div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
-        background-color: #28a745 !important;
-        border-color: #28a745 !important;
-        color: white !important;
+        background-color: #28a745 !important; border-color: #28a745 !important; color: white !important;
     }
     div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
-        background-color: #218838 !important;
-        border-color: #218838 !important;
+        background-color: #218838 !important; border-color: #218838 !important;
     }
-    
     .stRadio > div { gap: 0rem; }
     [data-testid="stHorizontalBlock"] { gap: 0.5rem; align-items: center; }
     div[data-testid="stToolbar"] { display: none; }
@@ -57,9 +53,7 @@ class SolutionRow(BaseModel):
 class AIWorksheetSolutions(BaseModel):
     solutions: list[SolutionRow]
 
-# --- Math Engine: ALGEBRA FORMATTING HELPER ---
 def format_alg(expr, var='x'):
-    """Cleans up raw algebraic strings dynamically based on the chosen variable"""
     expr = expr.replace("+ -", "- ").replace("- -", "+ ")
     expr = re.sub(rf'[+-]\s*0{var}\^2\b', '', expr)
     expr = re.sub(rf'\b0{var}\^2\b', '', expr)
@@ -74,12 +68,78 @@ def format_alg(expr, var='x'):
     if expr.startswith("+ "): expr = expr[2:]
     return expr.strip()
 
+# --- Math Engine: ABSTRACT PROBLEM GENERATOR ---
+def generate_abstract_data():
+    """Generates guaranteed integer math parameters for word problems, then calls Gemini for the narrative."""
+    variant = random.choice(['rectangle', 'ladder', 'consecutive', 'box'])
+    
+    if variant == 'rectangle':
+        w = random.randint(4, 15)
+        diff = random.randint(2, 9)
+        l = w + diff
+        area = w * l
+        context = f"A rectangle's length is {diff} units more than its width. The area is {area}. Find dimensions."
+        ans = f"Width = {w}, Length = {l}"
+        eq = f"w(w+{diff})={area}"
+        var_char = 'w'
+        
+    elif variant == 'ladder':
+        # Scaled 3-4-5 Pythagorean triples for clean math
+        scale = random.choice([2, 3, 4])
+        orig_base = 3 * scale
+        orig_height = 4 * scale
+        ladder = 5 * scale
+        move = 1 * scale # base moves out to 4*scale
+        drop = 1 * scale # height drops to 3*scale
+        context = f"A {ladder}m ladder leans on a wall. Base pulled {move}m further out. Top drops {drop}m. Find original height."
+        ans = f"Original height = {orig_height}m"
+        eq = f"x^2+y^2={ladder}^2"
+        var_char = 'y'
+        
+    elif variant == 'consecutive':
+        x = random.randint(5, 15)
+        prod = x * (x + 1)
+        context = f"The product of two consecutive positive integers is {prod}. Find the integers."
+        ans = f"{x} and {x+1}"
+        eq = f"x(x+1)={prod}"
+        var_char = 'x'
+        
+    elif variant == 'box':
+        cut = random.randint(2, 5)
+        base_w = random.randint(5, 12)
+        base_l = base_w + random.randint(2, 6)
+        sheet_w = base_w + (2 * cut)
+        sheet_l = base_l + (2 * cut)
+        vol = base_w * base_l * cut
+        context = f"An open box is made from a {sheet_l}cm by {sheet_w}cm cardboard sheet by cutting square corners of unknown size and folding up. The volume is {vol} cubic cm. Find the size of the corner cut."
+        ans = f"Cut size = {cut}cm"
+        eq = f"x({sheet_l}-2x)({sheet_w}-2x)={vol}"
+        var_char = 'x'
+
+    try:
+        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+        prompt = (
+            f"Turn these mathematical parameters into a short, engaging word problem suitable for a 15-year-old algebra student.\n"
+            f"Parameters: {context}\n"
+            f"Rules: Keep it strictly under 40 words. Do NOT include the solution or the equations. Do NOT use markdown formatting. Make it a simple paragraph."
+        )
+        response = client.models.generate_content(
+            model='gemini-3.6-flash',
+            contents=[prompt]
+        )
+        instruction_text = response.text.strip()
+    except Exception:
+        # Fallback if API fails during generation
+        instruction_text = context
+
+    return instruction_text, eq, ans, var_char
+
 # --- Math Engine: CORE GENERATOR ---
 def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
     types = [
         'expand_binomial', 'expand_perfect', 'factorise_single', 
         'factorise_quad', 'solve_linear', 'solve_quad', 
-        'simp_mono', 'simp_dots', 'simp_quad'
+        'simp_mono', 'simp_dots', 'simp_quad', 'abstract_problem'
     ]
     
     if specific_type != "All Topics (Random)":
@@ -87,15 +147,25 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
             "Expanding": ['expand_binomial', 'expand_perfect'],
             "Factorising": ['factorise_single', 'factorise_quad'],
             "Solving Equations": ['solve_linear', 'solve_quad'],
-            "Algebraic Fractions": ['simp_mono', 'simp_dots', 'simp_quad']
+            "Algebraic Fractions": ['simp_mono', 'simp_dots', 'simp_quad'],
+            "Abstract Problems": ['abstract_problem']
         }
         p_type = random.choice(mapping[specific_type])
     else:
         p_type = random.choice(types)
 
+    if p_type == 'abstract_problem':
+        instruction, q_latex, a_latex, var = generate_abstract_data()
+        return {
+            "type": p_type,
+            "instruction": instruction,
+            "q_latex": "", # Rendered entirely as text instruction
+            "a_latex": a_latex,
+            "variable": var
+        }
+
     limit = 5 if level == "1" else 9
     var = random.choice(['x', 'y', 'a', 'b', 'm', 'n', 'p', 'q', 't', 'k'])
-    
     instruction = "Solve:"
     q_latex = ""
     a_latex = ""
@@ -111,7 +181,6 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         c = 1 if level == "1" else random.randint(1, 4)
         b = r_nonzero(-limit, limit)
         d = r_nonzero(-limit, limit)
-        
         q_latex = format_alg(f"({a}{var} + {b})({c}{var} + {d})", var)
         a_latex = format_alg(f"{a*c}{var}^2 + {a*d + b*c}{var} + {b*d}", var)
         
@@ -119,7 +188,6 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         instruction = "Expand and simplify:"
         a = 1 if level == "1" else random.randint(2, 4)
         b = r_nonzero(-limit, limit)
-        
         q_latex = format_alg(f"({a}{var} + {b})^2", var)
         a_latex = format_alg(f"{a**2}{var}^2 + {2*a*b}{var} + {b**2}", var)
         
@@ -129,9 +197,7 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
             k = random.randint(2, limit)
             a = random.randint(1, 4)
             b = r_nonzero(-limit, limit)
-            if math.gcd(a, abs(b)) == 1:
-                break
-                
+            if math.gcd(a, abs(b)) == 1: break
         q_latex = format_alg(f"{k*a}{var}^2 + {k*b}{var}", var)
         a_latex = format_alg(f"{k}{var}({a}{var} + {b})", var)
         if a == 1: a_latex = format_alg(f"{k}{var}({var} + {b})", var)
@@ -142,7 +208,6 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         c = 1
         b = r_nonzero(-limit, limit)
         d = r_nonzero(-limit, limit)
-        
         A = a * c
         B = a * d + b * c
         C = b * d
@@ -155,18 +220,14 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         b = 1 if level == "1" else random.randint(2, 4)
         c = r_nonzero(-limit, limit)
         d = r_nonzero(1, 5)
-        
         if a * b == d: d += 1 
-        
         ans_x = random.randint(-limit, limit)
         e = (a * b - d) * ans_x + a * c
-        
         q_latex = format_alg(f"{a}({b}{var} + {c}) = {d}{var} + {e}", var)
         a_latex = f"{var} = {ans_x}"
         
     elif p_type == 'solve_quad':
         instruction = "Solve:"
-        
         if random.choice([True, False]):
             r1 = r_nonzero(-limit, limit)
             B = -(2 * r1)
@@ -175,12 +236,10 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         else:
             r1 = r_nonzero(-limit, limit)
             r2 = r_nonzero(-limit, limit)
-            while r2 == r1:
-                r2 = r_nonzero(-limit, limit)
+            while r2 == r1: r2 = r_nonzero(-limit, limit)
             B = -(r1 + r2)
             C = r1 * r2
             a_latex = f"{var} = {r1}, {var} = {r2}"
-            
         q_latex = format_alg(f"{var}^2 + {B}{var} + {C} = 0", var)
         
     elif p_type == 'simp_mono':
@@ -190,11 +249,9 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         x_power_bot = 1 if x_power_top == 2 else 2
         top_c = k * random.randint(1, 4)
         bot_c = k * random.randint(2, 5)
-        
         top_str = f"{top_c}{var}^2" if x_power_top == 2 else f"{top_c}{var}"
         bot_str = f"{bot_c}{var}^2" if x_power_bot == 2 else f"{bot_c}{var}"
         q_latex = f"\\frac{{{top_str}}}{{{bot_str}}}"
-        
         sim_top = int(top_c/k)
         sim_bot = int(bot_c/k)
         if x_power_top > x_power_bot:
@@ -216,11 +273,9 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         r2 = r_nonzero(-5, 5)
         B = -(r1 + r2)
         C = r1 * r2
-        
         sign_r1 = "+" if -r1 >= 0 else "-"
         bot_str = format_alg(f"{var} {sign_r1} {abs(-r1)}", var)
         top_str = format_alg(f"{var}^2 + {B}{var} + {C}", var)
-        
         q_latex = f"\\frac{{{top_str}}}{{{bot_str}}}"
         sign_r2 = "+" if -r2 >= 0 else "-"
         a_latex = format_alg(f"{var} {sign_r2} {abs(-r2)}", var)
@@ -248,11 +303,16 @@ def draw_algebra_image(problem_data, width_px=380, height_px=380):
     ax.set_ylim(0, 1)
     ax.axis('off')
     
-    ax.text(0.05, 0.95, problem_data['instruction'], fontsize=12, fontweight='bold', va='top', ha='left')
-    
-    fs = 18 if "\\frac" in problem_data['q_latex'] else 16
-    y_pos = 0.82 if "\\frac" in problem_data['q_latex'] else 0.86
-    ax.text(0.05, y_pos, f"${problem_data['q_latex']}$", fontsize=fs, va='top', ha='left', color='black')
+    if problem_data['type'] == 'abstract_problem':
+        # Text wrapping for LLM-generated narrative problems
+        wrapped_text = textwrap.fill(problem_data['instruction'], width=38)
+        ax.text(0.05, 0.95, wrapped_text, fontsize=14, fontweight='bold', va='top', ha='left', wrap=True)
+    else:
+        # Standard pure algebra rendering
+        ax.text(0.05, 0.95, problem_data['instruction'], fontsize=12, fontweight='bold', va='top', ha='left')
+        fs = 18 if "\\frac" in problem_data['q_latex'] else 16
+        y_pos = 0.82 if "\\frac" in problem_data['q_latex'] else 0.86
+        ax.text(0.05, y_pos, f"${problem_data['q_latex']}$", fontsize=fs, va='top', ha='left', color='black')
     
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, facecolor='white', transparent=False)
@@ -262,7 +322,7 @@ def draw_algebra_image(problem_data, width_px=380, height_px=380):
 
 # --- Worksheet PDF Generator ---
 def create_pdf_bytes(level, specific_type):
-    from google import genai
+    # Logic remains exactly the same, but incorporates abstract logic automatically
     buffer = io.BytesIO()
     try:
         with PdfPages(buffer) as pdf:
@@ -270,9 +330,7 @@ def create_pdf_bytes(level, specific_type):
             ai_steps = {}
             try:
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                
                 payload = "".join([f"Q{i+1}: {p['instruction']} {p['q_latex']} | Final Ans: {p['a_latex']}\n" for i, p in enumerate(problems)])
-                    
                 prompt = (
                     "Write concise step-by-step algebra solutions using valid LaTeX math expressions enclosed in single dollar signs. "
                     "Use \\n to separate steps so they break into new lines cleanly. "
@@ -296,9 +354,13 @@ def create_pdf_bytes(level, specific_type):
                 row, col = divmod(idx, 4)
                 ax = axes[row, col]
                 ax.axis('off')
-                ax.text(0.05, 0.95, f"Q{idx+1}: {p_data['instruction']}", fontsize=8, fontweight='bold', va='top')
-                fs = 14 if "\\frac" in p_data['q_latex'] else 11
-                ax.text(0.05, 0.75, f"${p_data['q_latex']}$", fontsize=fs, va='top')
+                if p_data['type'] == 'abstract_problem':
+                    wrapped_txt = textwrap.fill(f"Q{idx+1}: {p_data['instruction']}", width=35)
+                    ax.text(0.05, 0.95, wrapped_txt, fontsize=8, fontweight='bold', va='top')
+                else:
+                    ax.text(0.05, 0.95, f"Q{idx+1}: {p_data['instruction']}", fontsize=8, fontweight='bold', va='top')
+                    fs = 14 if "\\frac" in p_data['q_latex'] else 11
+                    ax.text(0.05, 0.75, f"${p_data['q_latex']}$", fontsize=fs, va='top')
                 
             pdf.savefig(fig_ws); plt.close(fig_ws)
 
@@ -309,7 +371,6 @@ def create_pdf_bytes(level, specific_type):
                 left_idx, right_idx = i, i + 10
                 txt_l = f"Q{left_idx+1}: ${problems[left_idx]['a_latex']}$\n{ai_steps.get(left_idx+1, '')}"
                 txt_r = f"Q{right_idx+1}: ${problems[right_idx]['a_latex']}$\n{ai_steps.get(right_idx+1, '')}"
-                
                 y_pos = 0.90 - (i * 0.088)
                 ax_ans.text(0.04, y_pos, txt_l, fontsize=7.0, va='top', wrap=True)
                 ax_ans.text(0.52, y_pos, txt_r, fontsize=7.0, va='top', wrap=True)
@@ -365,7 +426,7 @@ with col_actions:
 with col_set:
     with st.popover("⚙️", use_container_width=True):
         st.write("**Settings**")
-        topics = ["All Topics (Random)", "Expanding", "Factorising", "Solving Equations", "Algebraic Fractions"]
+        topics = ["All Topics (Random)", "Expanding", "Factorising", "Solving Equations", "Algebraic Fractions", "Abstract Problems"]
         st.selectbox("Filter Topic", topics, key="alg_topic", on_change=handle_settings_change)
         st.radio("Level", ["1", "2"], key="level", horizontal=True, on_change=handle_settings_change)
         st.radio("Interaction Mode", ["Identification", "Solve"], key="interaction_mode", on_change=handle_settings_change)
@@ -375,7 +436,7 @@ with col_set:
 
 # --- Master App Logic ---
 if st.session_state.generating:
-    with st.spinner("Generating algebra problem..."):
+    with st.spinner("Drafting your custom word problem..."):
         p_data = generate_algebra_problem(st.session_state.level, st.session_state.alg_topic)
         st.session_state.alg_problem_data = p_data
         st.session_state.problem_image_context = draw_algebra_image(p_data, width_px=380, height_px=380)
@@ -386,10 +447,11 @@ else:
     bg_image = st.session_state.problem_image_context
     p_data = st.session_state.alg_problem_data
     
-    st.write(f"**{p_data['instruction']}**")
-    st.latex(p_data['q_latex'])
+    if p_data['type'] != 'abstract_problem':
+        st.write(f"**{p_data['instruction']}**")
+        st.latex(p_data['q_latex'])
 
-    if st.session_state.interaction_mode == "Identification":
+    if st.session_state.interaction_mode == "Identification" and p_data['type'] != 'abstract_problem':
         st.image(bg_image, use_container_width=True)
         st.write("Which of the following is the correct mathematical conclusion?")
         
@@ -419,10 +481,9 @@ else:
     else:
         canvas_height = 380
         
-        # --- DIGITAL INK CORRECTION RULES INJECTION ---
         problem_context = (
             f"This is an algebra problem. Instruction: {p_data['instruction']}. "
-            f"Question expression: {p_data['q_latex']}. "
+            f"Question expression: {p_data.get('q_latex', 'None')}. "
             f"The exact correct final algebraic answer is: {p_data['a_latex']}. "
             f"The unknown variable used is '{p_data['variable']}'.\n\n"
             "IMPORTANT GRADING RULES FOR DIGITAL INK CORRECTIONS:\n"
