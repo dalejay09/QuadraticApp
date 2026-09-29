@@ -102,7 +102,7 @@ def draw_math_setup(op, num1, num2):
         line_end = 0.48 + (num_digits * 0.09)
         
         ax.plot([0.46, line_end], [0.93, 0.93], color='black', lw=3)
-        ax.text(0.48, 0.85, f"{dividend}", fontsize=34, ha='left', va='center', fontfamily='monospace', letterspacing=2)
+        ax.text(0.48, 0.85, f"{dividend}", fontsize=34, ha='left', va='center', fontfamily='monospace')
 
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
@@ -119,6 +119,7 @@ if 'stroke_history' not in st.session_state: st.session_state.stroke_history = [
 if 'active_initial_drawing' not in st.session_state: st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
 if 'is_correct' not in st.session_state: st.session_state.is_correct = False
 if 'user_input' not in st.session_state: st.session_state.user_input = ""
+if 'pending_ans_update' not in st.session_state: st.session_state.pending_ans_update = None
 if 'last_submitted_text' not in st.session_state: st.session_state.last_submitted_text = None
 if 'last_canvas_state' not in st.session_state: st.session_state.last_canvas_state = []
 
@@ -147,6 +148,7 @@ if st.session_state.generating:
         st.session_state.color_index = 0 
         st.session_state.is_correct = False
         st.session_state.user_input = "" 
+        st.session_state.pending_ans_update = None
         st.session_state.stroke_history = [[]]
         st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
         st.session_state.last_submitted_text = None
@@ -184,6 +186,7 @@ else:
             if st.button("🗑️ Clear All", use_container_width=True):
                 st.session_state.stroke_history = [[]]
                 st.session_state.active_initial_drawing = {"version": "4.4.0", "objects": []}
+                st.session_state.color_index = 0
                 st.session_state.canvas_key += 1
                 st.rerun()
 
@@ -219,8 +222,26 @@ else:
 
     st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
     
+    # --- MAGIC UI INTERCEPT ---
+    if st.session_state.pending_ans_update is not None:
+        st.session_state.user_input = st.session_state.pending_ans_update
+        st.session_state.pending_ans_update = None
+        
     placeholder_text = "e.g. 1035 or 14 R 2" if st.session_state.operation == "Division" else "e.g. 1035"
     user_answer = st.text_input("Type your final answer:", placeholder=placeholder_text, key="user_input").strip().lower()
+    
+    # --- FORCE MOBILE NUMERIC KEYPAD ---
+    components.html(
+        """
+        <script>
+        const inputs = window.parent.document.querySelectorAll('input[type="text"]');
+        inputs.forEach(input => {
+            input.setAttribute('inputmode', 'tel');
+        });
+        </script>
+        """,
+        height=0, width=0
+    )
     
     trigger_ai = False
 
@@ -271,8 +292,11 @@ else:
                     IMPORTANT RULES:
                     1. If a student sketches a vertical line or plus sign over an existing minus sign, evaluate it as positive. Horizontal lines over plus signs evaluate as negative.
                     2. Ignore old strikethroughs from older colors. Evaluate only {current_color_name} ink.
-                    3. If their {current_color_name} final answer is CORRECT ({target_ans}), reply EXACTLY with "CORRECT:" on line 1, followed by a warm, praising message on line 2.
-                    4. If their answer is incorrect or missing, reply EXACTLY with "INCORRECT:" on line 1, and figure out WHERE they went wrong in their {current_color_name} workings on line 2. Gently guide them on what to do next without giving the answer away.
+                    
+                    YOU MUST FORMAT YOUR RESPONSE EXACTLY LIKE THIS (Three lines, no extra text):
+                    VERDICT: [Write EXACTLY "CORRECT" or "INCORRECT"]
+                    FOUND_ANSWER: [If they wrote a final answer anywhere on the canvas, write it here exactly as they wrote it (e.g., "1035" or "14 R 2"). If left blank, write "NONE"]
+                    MESSAGE: [If correct, a warm praising message. If incorrect, figure out WHERE they went wrong in their {current_color_name} workings and gently guide them without giving the final answer.]
                     """
                     
                     response = client.models.generate_content(
@@ -282,15 +306,34 @@ else:
                     
                     resp_text = response.text.strip()
                     
-                    if resp_text.upper().startswith("CORRECT"):
-                        st.session_state.is_correct = True
-                        msg = re.sub(r'(?i)^CORRECT:?\s*', '', resp_text).strip()
-                        st.session_state.ai_feedback = f"🌟 **Awesome job!** {msg}"
+                    match = re.search(r'VERDICT:\s*(CORRECT|INCORRECT)\s*\nFOUND_ANSWER:\s*(.*?)\s*\nMESSAGE:\s*(.*)', resp_text, re.IGNORECASE | re.DOTALL)
+                    
+                    if match:
+                        verdict = match.group(1).upper()
+                        found_ans = match.group(2).strip()
+                        msg = match.group(3).strip()
+                        
+                        if found_ans.upper() != "NONE":
+                            st.session_state.pending_ans_update = found_ans
+                        
+                        if verdict == "CORRECT":
+                            st.session_state.is_correct = True
+                            st.session_state.ai_feedback = f"🌟 **Awesome job!** {msg}"
+                        else:
+                            st.session_state.is_correct = False
+                            st.session_state.ai_feedback = f"🤖 **Tutor says:** {msg}"
+                            st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                     else:
-                        st.session_state.is_correct = False
-                        msg = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text).strip()
-                        st.session_state.ai_feedback = f"🤖 **Tutor says:** {msg}"
-                        st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
+                        # Fallback if AI formatting breaks
+                        if resp_text.upper().startswith("CORRECT"):
+                            st.session_state.is_correct = True
+                            msg = re.sub(r'(?i)^CORRECT:?\s*', '', resp_text).strip()
+                            st.session_state.ai_feedback = f"🌟 **Awesome job!** {msg}"
+                        else:
+                            st.session_state.is_correct = False
+                            msg = re.sub(r'(?i)^INCORRECT:?\s*', '', resp_text).strip()
+                            st.session_state.ai_feedback = f"🤖 **Tutor says:** {msg}"
+                            st.session_state.color_index = (st.session_state.color_index + 1) % len(PEN_COLORS)
                         
                     st.rerun()
                     
