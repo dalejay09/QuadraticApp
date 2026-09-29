@@ -95,14 +95,15 @@ def draw_math_setup(op, num1, num2):
     else:
         # Long Division Bracket
         divisor, dividend = num1, num2
-        ax.text(0.38, 0.85, f"{divisor}", fontsize=34, ha='right', va='center', fontfamily='monospace')
-        ax.text(0.42, 0.85, ")", fontsize=34, ha='left', va='center', fontfamily='monospace')
+        # Shifted left (X coordinates) and down (Y coordinates) for more space above and right
+        ax.text(0.20, 0.70, f"{divisor}", fontsize=34, ha='right', va='center', fontfamily='monospace')
+        ax.text(0.24, 0.70, ")", fontsize=34, ha='left', va='center', fontfamily='monospace')
         
         num_digits = len(str(dividend))
-        line_end = 0.48 + (num_digits * 0.09)
+        line_end = 0.30 + (num_digits * 0.09)
         
-        ax.plot([0.46, line_end], [0.93, 0.93], color='black', lw=3)
-        ax.text(0.48, 0.85, f"{dividend}", fontsize=34, ha='left', va='center', fontfamily='monospace')
+        ax.plot([0.28, line_end], [0.78, 0.78], color='black', lw=3)
+        ax.text(0.30, 0.70, f"{dividend}", fontsize=34, ha='left', va='center', fontfamily='monospace')
 
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=100, facecolor='white', transparent=False)
