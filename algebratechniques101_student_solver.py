@@ -296,7 +296,7 @@ def generate_distractors(a_latex, var='x'):
     return a_latex, d1, d2
 
 # --- Visual Engine: CANVAS RENDERER ---
-def draw_algebra_image(problem_data, width_px=380, height_px=380):
+def draw_algebra_image(problem_data, width_px=380, height_px=760):
     fig, ax = plt.subplots(figsize=(width_px/100, height_px/100), dpi=100)
     fig.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02)
     ax.set_xlim(0, 1)
@@ -304,14 +304,14 @@ def draw_algebra_image(problem_data, width_px=380, height_px=380):
     ax.axis('off')
     
     if problem_data['type'] == 'abstract_problem':
-        # Text wrapping for LLM-generated narrative problems
-        wrapped_text = textwrap.fill(problem_data['instruction'], width=38)
-        ax.text(0.05, 0.95, wrapped_text, fontsize=14, fontweight='bold', va='top', ha='left', wrap=True)
+        # Clean sans-serif font for the narrative problems
+        wrapped_text = textwrap.fill(problem_data['instruction'], width=45)
+        ax.text(0.05, 0.98, wrapped_text, fontsize=12, fontweight='normal', fontfamily='sans-serif', va='top', ha='left', wrap=True)
     else:
         # Standard pure algebra rendering
-        ax.text(0.05, 0.95, problem_data['instruction'], fontsize=12, fontweight='bold', va='top', ha='left')
+        ax.text(0.05, 0.98, problem_data['instruction'], fontsize=12, fontweight='bold', va='top', ha='left')
         fs = 18 if "\\frac" in problem_data['q_latex'] else 16
-        y_pos = 0.82 if "\\frac" in problem_data['q_latex'] else 0.86
+        y_pos = 0.90 if "\\frac" in problem_data['q_latex'] else 0.92
         ax.text(0.05, y_pos, f"${problem_data['q_latex']}$", fontsize=fs, va='top', ha='left', color='black')
     
     buf = io.BytesIO()
@@ -322,7 +322,6 @@ def draw_algebra_image(problem_data, width_px=380, height_px=380):
 
 # --- Worksheet PDF Generator ---
 def create_pdf_bytes(level, specific_type):
-    # Logic remains exactly the same, but incorporates abstract logic automatically
     buffer = io.BytesIO()
     try:
         with PdfPages(buffer) as pdf:
@@ -439,7 +438,7 @@ if st.session_state.generating:
     with st.spinner("Drafting your custom word problem..."):
         p_data = generate_algebra_problem(st.session_state.level, st.session_state.alg_topic)
         st.session_state.alg_problem_data = p_data
-        st.session_state.problem_image_context = draw_algebra_image(p_data, width_px=380, height_px=380)
+        st.session_state.problem_image_context = draw_algebra_image(p_data, width_px=380, height_px=760)
         st.session_state.generating = False
         st.rerun()
 
@@ -479,7 +478,7 @@ else:
             else: st.warning(f"🤖 {f_msg}")
             
     else:
-        canvas_height = 380
+        canvas_height = 760
         
         problem_context = (
             f"This is an algebra problem. Instruction: {p_data['instruction']}. "
