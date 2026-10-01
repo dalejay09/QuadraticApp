@@ -71,7 +71,7 @@ def format_alg(expr, var='x'):
 # --- Math Engine: ABSTRACT PROBLEM GENERATOR ---
 def generate_abstract_data():
     """Generates guaranteed integer math parameters for word problems, then calls Gemini for the narrative."""
-    variant = random.choice(['rectangle', 'ladder', 'consecutive', 'box'])
+    variant = random.choice(['rectangle', 'ladder', 'consecutive', 'box', 'projectile'])
     
     if variant == 'rectangle':
         w = random.randint(4, 15)
@@ -84,13 +84,12 @@ def generate_abstract_data():
         var_char = 'w'
         
     elif variant == 'ladder':
-        # Scaled 3-4-5 Pythagorean triples for clean math
         scale = random.choice([2, 3, 4])
         orig_base = 3 * scale
         orig_height = 4 * scale
         ladder = 5 * scale
-        move = 1 * scale # base moves out to 4*scale
-        drop = 1 * scale # height drops to 3*scale
+        move = 1 * scale 
+        drop = 1 * scale 
         context = f"A {ladder}m ladder leans on a wall. Base pulled {move}m further out. Top drops {drop}m. Find original height."
         ans = f"Original height = {orig_height}m"
         eq = f"x^2+y^2={ladder}^2"
@@ -105,16 +104,27 @@ def generate_abstract_data():
         var_char = 'x'
         
     elif variant == 'box':
-        cut = random.randint(2, 5)
-        base_w = random.randint(5, 12)
-        base_l = base_w + random.randint(2, 6)
-        sheet_w = base_w + (2 * cut)
-        sheet_l = base_l + (2 * cut)
-        vol = base_w * base_l * cut
-        context = f"An open box is made from a {sheet_l}cm by {sheet_w}cm cardboard sheet by cutting square corners of unknown size and folding up. The volume is {vol} cubic cm. Find the size of the corner cut."
-        ans = f"Cut size = {cut}cm"
-        eq = f"x({sheet_l}-2x)({sheet_w}-2x)={vol}"
+        # Now safely configured as a pure quadratic
+        c = random.randint(2, 4)
+        w = random.randint(2 * c + 2, 12)
+        diff = random.randint(2, 5)
+        l = w + diff
+        vol = c * (w - 2 * c) * (l - 2 * c)
+        context = f"An open box is made by cutting {c}cm squares from the corners of a rectangular cardboard sheet and folding up the sides. The original sheet was {diff}cm longer than it was wide. The box's volume is {vol} cubic cm. Find the original width of the cardboard."
+        ans = f"Original width = {w}cm"
+        eq = f"{c}(x - {2*c})(x + {diff - 2*c}) = {vol}"
         var_char = 'x'
+        
+    elif variant == 'projectile':
+        # -5(t - a)(t + b) = 0 logic for clean factoring
+        a = random.randint(3, 8) 
+        b = random.randint(1, 3) 
+        v = 5 * (a - b)
+        h0 = 5 * a * b
+        context = f"A water balloon is launched upwards from a height of {h0}m. Its height in meters after t seconds is given by h = -5t^2 + {v}t + {h0}. Find how many seconds it takes to hit the ground (h=0)."
+        ans = f"Time = {a} seconds"
+        eq = f"-5t^2 + {v}t + {h0} = 0"
+        var_char = 't'
 
     try:
         client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -159,7 +169,7 @@ def generate_algebra_problem(level="1", specific_type="All Topics (Random)"):
         return {
             "type": p_type,
             "instruction": instruction,
-            "q_latex": "", # Rendered entirely as text instruction
+            "q_latex": "", 
             "a_latex": a_latex,
             "variable": var
         }
@@ -304,11 +314,9 @@ def draw_algebra_image(problem_data, width_px=380, height_px=760):
     ax.axis('off')
     
     if problem_data['type'] == 'abstract_problem':
-        # Clean sans-serif font for the narrative problems
         wrapped_text = textwrap.fill(problem_data['instruction'], width=45)
         ax.text(0.05, 0.98, wrapped_text, fontsize=12, fontweight='normal', fontfamily='sans-serif', va='top', ha='left', wrap=True)
     else:
-        # Standard pure algebra rendering
         ax.text(0.05, 0.98, problem_data['instruction'], fontsize=12, fontweight='bold', va='top', ha='left')
         fs = 18 if "\\frac" in problem_data['q_latex'] else 16
         y_pos = 0.90 if "\\frac" in problem_data['q_latex'] else 0.92
